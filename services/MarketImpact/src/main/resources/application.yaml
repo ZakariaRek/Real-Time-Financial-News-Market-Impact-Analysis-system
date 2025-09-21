@@ -1,1 +1,103 @@
-spring.application.name=MarketImpact
+spring:
+  application:
+    name: MarketImpact
+
+  # Database Configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/market_impact?currentSchema=public
+    username: ${DB_USERNAME:market_user}
+    password: ${DB_PASSWORD:market_pass}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 20000
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      leak-detection-threshold: 60000
+
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: ${SHOW_SQL:false}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        default_schema: public
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+
+  # Flyway Configuration
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    schemas: public
+
+  # Redis Configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 8
+          min-idle: 0
+
+  # gRPC Configuration
+  grpc:
+    server:
+      port: 9090
+
+# Logging Configuration
+logging:
+  level:
+    com.market_impact.MarketImpact: ${LOG_LEVEL:INFO}
+    org.hibernate.SQL: ${SQL_LOG_LEVEL:WARN}
+    org.hibernate.type.descriptor.sql.BasicBinder: ${SQL_PARAM_LOG_LEVEL:WARN}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Management/Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# Application Configuration
+app:
+  market-impact:
+    prediction:
+      confidence-threshold: 0.7
+      batch-size: 1000
+    timescale:
+      retention-days: 365
+      compression-interval: 7d
+    cache:
+      prediction-ttl: 3600 # 1 hour in seconds
+      market-data-ttl: 300  # 5 minutes in seconds
+
+# Server Configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /market-impact
+  compression:
+    enabled: true
+  http2:
+    enabled: true
