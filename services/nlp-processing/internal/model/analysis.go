@@ -2,8 +2,6 @@
 package model
 
 import (
-	"github.com/lib/pq"
-	"gorm.io/gorm"
 	"time"
 )
 

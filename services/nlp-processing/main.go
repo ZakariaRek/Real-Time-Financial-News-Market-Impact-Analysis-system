@@ -11,14 +11,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/database"
-	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/handler"
-	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/repository"
-	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/service"
 )
 
 func main() {
@@ -30,9 +26,9 @@ func main() {
 	// Initialize logger
 	initLogger()
 
+	logrus.Info("Starting NLP Processing Service...")
+
 	// Initialize database connection
-	// Note: For high-volume financial analytics in production, consider ClickHouse on AWS
-	// This PostgreSQL implementation provides compatibility with the requested architecture
 	dbConfig := database.Config{
 		Host:            viper.GetString("database.postgres.host"),
 		Port:            viper.GetInt("database.postgres.port"),
@@ -46,18 +42,27 @@ func main() {
 		ConnMaxIdleTime: viper.GetString("database.postgres.conn_max_idle_time"),
 	}
 
+	// Debug: Print database config (without password)
+	logrus.Infof("Connecting to database - Host: %s, Port: %d, Database: %s, Username: %s, SSL: %s",
+		dbConfig.Host, dbConfig.Port, dbConfig.Database, dbConfig.Username, dbConfig.SSLMode)
+
+	// Connect to database
 	db, err := database.NewConnection(dbConfig)
 	if err != nil {
 		logrus.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
+	logrus.Info("Database connection established successfully")
+
 	// Run database migrations
 	if err := db.AutoMigrate(); err != nil {
 		logrus.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	// Create additional indexes for analytics performance
+	logrus.Info("Database migrations completed successfully")
+
+	// Create additional indexes for performance
 	if err := db.CreateIndexes(); err != nil {
 		logrus.Warnf("Failed to create some indexes: %v", err)
 	}
@@ -66,43 +71,6 @@ func main() {
 	if err := db.CreateMaterializedViews(); err != nil {
 		logrus.Warnf("Failed to create materialized views: %v", err)
 	}
-
-	// Initialize Redis client for caching
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", viper.GetString("redis.host"), viper.GetInt("redis.port")),
-		Password: viper.GetString("redis.password"),
-		DB:       viper.GetInt("redis.database"),
-	})
-	defer redisClient.Close()
-
-	// Test Redis connection
-	ctx := context.Background()
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		logrus.Warnf("Failed to connect to Redis: %v", err)
-	} else {
-		logrus.Info("Successfully connected to Redis")
-	}
-
-	// Initialize repositories
-	analysisRepo := repository.NewAnalysisRepository(db.DB)
-	cacheRepo := repository.NewCacheRepository(redisClient)
-
-	// Initialize ML services
-	sentimentService := service.NewSentimentService()
-	nerService := service.NewNERService()
-	topicService := service.NewTopicClassificationService()
-
-	// Initialize main NLP service
-	nlpService := service.NewNLPService(
-		analysisRepo,
-		cacheRepo,
-		sentimentService,
-		nerService,
-		topicService,
-	)
-
-	// Initialize HTTP handlers
-	httpHandler := handler.NewHTTPHandler(nlpService, analysisRepo)
 
 	// Setup Gin router
 	if viper.GetString("server.environment") == "production" {
@@ -119,31 +87,61 @@ func main() {
 			"status":    "healthy",
 			"service":   "nlp-processing",
 			"timestamp": time.Now().UTC(),
+			"database":  "connected",
 		})
 	})
 
-	// API routes
-	v1 := router.Group("/api/v1")
-	{
-		// Analysis endpoints
-		v1.POST("/analyze", httpHandler.AnalyzeArticle)
-		v1.POST("/analyze/batch", httpHandler.AnalyzeBatch)
-		v1.GET("/analysis/:article_id", httpHandler.GetAnalysis)
+	// Basic database status endpoint
+	router.GET("/db/status", func(c *gin.Context) {
+		// Test database connection
+		sqlDB, err := db.DB.DB()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status": "error",
+				"error":  "Failed to get database instance",
+			})
+			return
+		}
 
-		// Analytics endpoints
-		v1.GET("/analytics/sentiment/:symbol", httpHandler.GetSentimentTrends)
-		v1.GET("/analytics/topics/trending", httpHandler.GetTrendingTopics)
-		v1.GET("/analytics/entities/mentioned", httpHandler.GetMostMentionedEntities)
-		v1.GET("/analytics/breaking-news", httpHandler.GetBreakingNews)
+		if err := sqlDB.Ping(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status": "error",
+				"error":  "Database ping failed",
+			})
+			return
+		}
 
-		// Model endpoints
-		v1.POST("/models/sentiment", httpHandler.PredictSentiment)
-		v1.POST("/models/entities", httpHandler.ExtractEntities)
-		v1.POST("/models/topics", httpHandler.ClassifyTopic)
-	}
+		stats := sqlDB.Stats()
+		c.JSON(http.StatusOK, gin.H{
+			"status": "connected",
+			"stats": gin.H{
+				"open_connections":     stats.OpenConnections,
+				"in_use":               stats.InUse,
+				"idle":                 stats.Idle,
+				"wait_count":           stats.WaitCount,
+				"wait_duration":        stats.WaitDuration.String(),
+				"max_idle_closed":      stats.MaxIdleClosed,
+				"max_idle_time_closed": stats.MaxIdleTimeClosed,
+				"max_lifetime_closed":  stats.MaxLifetimeClosed,
+			},
+		})
+	})
 
-	// Start background workers
-	go startBackgroundWorkers(ctx, nlpService, db)
+	// Basic materialized view refresh endpoint
+	router.POST("/db/refresh-views", func(c *gin.Context) {
+		if err := db.RefreshMaterializedViews(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status": "error",
+				"error":  "Failed to refresh materialized views",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "success",
+			"message": "Materialized views refreshed successfully",
+		})
+	})
 
 	// Setup HTTP server
 	port := viper.GetInt("server.port")
@@ -159,10 +157,16 @@ func main() {
 	// Start server in a goroutine
 	go func() {
 		logrus.Infof("Starting NLP Processing Service on port %d", port)
+		logrus.Infof("Health check available at: http://localhost:%d/health", port)
+		logrus.Infof("Database status available at: http://localhost:%d/db/status", port)
+		logrus.Infof("Refresh views available at: http://localhost:%d/db/refresh-views", port)
+
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logrus.Fatalf("Failed to start server: %v", err)
 		}
 	}()
+
+	logrus.Info("Service started successfully! Press Ctrl+C to shutdown...")
 
 	// Wait for interrupt signal to gracefully shutdown the server
 	quit := make(chan os.Signal, 1)
@@ -186,22 +190,44 @@ func initConfig() error {
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("./config")
 	viper.AddConfigPath(".")
+	viper.AddConfigPath("./")
 
 	// Set default values
 	viper.SetDefault("server.port", 4002)
 	viper.SetDefault("server.environment", "development")
 	viper.SetDefault("database.postgres.host", "localhost")
 	viper.SetDefault("database.postgres.port", 5432)
+	viper.SetDefault("database.postgres.database", "nlp_processing")
+	viper.SetDefault("database.postgres.username", "postgres")
+	viper.SetDefault("database.postgres.password", "zakaria")
+	viper.SetDefault("database.postgres.ssl_mode", "disable")
+	viper.SetDefault("database.postgres.max_open_conns", 30)
+	viper.SetDefault("database.postgres.max_idle_conns", 10)
+	viper.SetDefault("database.postgres.conn_max_lifetime", "5m")
+	viper.SetDefault("database.postgres.conn_max_idle_time", "2m")
+	viper.SetDefault("logging.level", "info")
+	viper.SetDefault("logging.format", "text")
 	viper.SetDefault("redis.host", "localhost")
 	viper.SetDefault("redis.port", 6379)
 	viper.SetDefault("redis.database", 1)
 
-	// Read environment variables
+	// Read environment variables with prefix
+	viper.SetEnvPrefix("NLP")
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
 		logrus.Warnf("Config file not found, using defaults: %v", err)
+	} else {
+		logrus.Infof("Using config file: %s", viper.ConfigFileUsed())
 	}
+
+	// Debug: Print database configuration
+	logrus.Debugf("Database config - Host: %s, Port: %d, Database: %s, Username: %s, SSL: %s",
+		viper.GetString("database.postgres.host"),
+		viper.GetInt("database.postgres.port"),
+		viper.GetString("database.postgres.database"),
+		viper.GetString("database.postgres.username"),
+		viper.GetString("database.postgres.ssl_mode"))
 
 	return nil
 }
@@ -230,61 +256,4 @@ func initLogger() {
 			FullTimestamp: true,
 		})
 	}
-}
-
-func startBackgroundWorkers(ctx context.Context, nlpService service.NLPService, db *database.Database) {
-	logrus.Info("Starting background processing workers")
-
-	// Start materialized view refresh worker
-	go func() {
-		ticker := time.NewTicker(1 * time.Hour)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				if err := db.RefreshMaterializedViews(); err != nil {
-					logrus.WithError(err).Error("Failed to refresh materialized views")
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	// Start batch processing worker for pending articles
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				if err := nlpService.ProcessPendingArticles(ctx); err != nil {
-					logrus.WithError(err).Error("Batch processing failed")
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	// Start model cache warming worker
-	go func() {
-		ticker := time.NewTicker(30 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				if err := nlpService.WarmModelCaches(ctx); err != nil {
-					logrus.WithError(err).Error("Model cache warming failed")
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	logrus.Info("Background workers started successfully")
 }
