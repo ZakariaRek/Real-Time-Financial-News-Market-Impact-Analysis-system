@@ -21,9 +21,13 @@ public interface UserSubscriptionRepository extends JpaRepository<UserSubscripti
 
     List<UserSubscription> findByUserIdAndIsActive(String userId, Boolean isActive);
 
-    @Query("SELECT us FROM UserSubscription us WHERE :symbol = ANY(us.symbols) AND us.isActive = true")
+    // Fixed: Using native SQL query for PostgreSQL array operations
+    @Query(value = "SELECT * FROM user_subscriptions us WHERE :symbol = ANY(us.symbols) AND us.is_active = true",
+            nativeQuery = true)
     List<UserSubscription> findActiveSubscriptionsBySymbol(@Param("symbol") String symbol);
 
-    @Query("SELECT us FROM UserSubscription us WHERE :signalType = ANY(us.signalTypes) AND us.isActive = true")
+    // Fixed: Using native SQL query for PostgreSQL array operations
+    @Query(value = "SELECT * FROM user_subscriptions us WHERE :signalType = ANY(us.signal_types) AND us.is_active = true",
+            nativeQuery = true)
     List<UserSubscription> findActiveSubscriptionsBySignalType(@Param("signalType") String signalType);
 }
