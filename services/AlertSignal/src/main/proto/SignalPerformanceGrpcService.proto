@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package com.alert_signals.grpc;
+
+option java_multiple_files = true;
+option java_package = "com.alert_signals.AlertSignal.grpc.generated";
+
+import "google/protobuf/timestamp.proto";
+
+// Signal Performance Service
+service SignalPerformanceGrpcService {
+  rpc CreatePerformanceRecord(CreatePerformanceRecordRequest) returns (PerformanceResponse);
+  rpc GetPerformance(GetPerformanceRequest) returns (PerformanceResponse);
+  rpc GetPerformanceBySignalId(GetPerformanceBySignalIdRequest) returns (PerformanceListResponse);
+  rpc GetPerformanceBySignalAndDate(GetPerformanceBySignalAndDateRequest) returns (PerformanceResponse);
+  rpc GetPerformanceByDateRange(GetPerformanceByDateRangeRequest) returns (PerformanceListResponse);
+  rpc GetAverageAccuracyForSignal(GetAverageAccuracyForSignalRequest) returns (AverageAccuracyResponse);
+  rpc GetLatestPerformanceForSignal(GetLatestPerformanceForSignalRequest) returns (PerformanceListResponse);
+  rpc UpdatePerformance(UpdatePerformanceRequest) returns (PerformanceResponse);
+  rpc DeletePerformance(DeletePerformanceRequest) returns (DeletePerformanceResponse);
+}
+
+// Messages
+message CreatePerformanceRecordRequest {
+  string signal_id = 1;
+  google.protobuf.Timestamp performance_date = 2;
+  double return_1d = 3;
+  double return_1w = 4;
+  double max_drawdown = 5;
+  double accuracy = 6;
+}
+
+message GetPerformanceRequest {
+  string id = 1;
+}
+
+message GetPerformanceBySignalIdRequest {
+  string signal_id = 1;
+}
+
+message GetPerformanceBySignalAndDateRequest {
+  string signal_id = 1;
+  google.protobuf.Timestamp performance_date = 2;
+}
+
+message GetPerformanceByDateRangeRequest {
+  google.protobuf.Timestamp start_date = 1;
+  google.protobuf.Timestamp end_date = 2;
+}
+
+message GetAverageAccuracyForSignalRequest {
+  string signal_id = 1;
+}
+
+message GetLatestPerformanceForSignalRequest {
+  string signal_id = 1;
+}
+
+message UpdatePerformanceRequest {
+  string id = 1;
+  string signal_id = 2;
+  google.protobuf.Timestamp performance_date = 3;
+  double return_1d = 4;
+  double return_1w = 5;
+  double max_drawdown = 6;
+  double accuracy = 7;
+}
+
+message DeletePerformanceRequest {
+  string id = 1;
+}
+
+message PerformanceResponse {
+  string id = 1;
+  string signal_id = 2;
+  google.protobuf.Timestamp performance_date = 3;
+  double return_1d = 4;
+  double return_1w = 5;
+  double max_drawdown = 6;
+  double accuracy = 7;
+}
+
+message PerformanceListResponse {
+  repeated PerformanceResponse performances = 1;
+}
+
+message AverageAccuracyResponse {
+  double average_accuracy = 1;
+}
+
+message DeletePerformanceResponse {
+  bool success = 1;
+  string message = 2;
+}

@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package com.alert_signals.grpc;
+
+option java_multiple_files = true;
+option java_package = "com.alert_signals.AlertSignal.grpc.generated";
+
+import "google/protobuf/timestamp.proto";
+
+// Trading Signal Service
+service TradingSignalGrpcService {
+  rpc CreateSignal(CreateSignalRequest) returns (SignalResponse);
+  rpc GetSignal(GetSignalRequest) returns (SignalResponse);
+  rpc GetSignalsBySymbol(GetSignalsBySymbolRequest) returns (SignalListResponse);
+  rpc GetSignalsByStatus(GetSignalsByStatusRequest) returns (SignalListResponse);
+  rpc UpdateSignal(UpdateSignalRequest) returns (SignalResponse);
+  rpc DeleteSignal(DeleteSignalRequest) returns (DeleteSignalResponse);
+  rpc GetSignalsByDateRange(GetSignalsByDateRangeRequest) returns (SignalListResponse);
+}
+
+// Messages
+message CreateSignalRequest {
+  string prediction_id = 1;
+  string symbol = 2;
+  string signal_type = 3;
+  string direction = 4;
+  double strength = 5;
+  double confidence = 6;
+  string status = 7;
+}
+
+message GetSignalRequest {
+  string id = 1;
+}
+
+message GetSignalsBySymbolRequest {
+  string symbol = 1;
+}
+
+message GetSignalsByStatusRequest {
+  string status = 1;
+}
+
+message UpdateSignalRequest {
+  string id = 1;
+  string prediction_id = 2;
+  string symbol = 3;
+  string signal_type = 4;
+  string direction = 5;
+  double strength = 6;
+  double confidence = 7;
+  string status = 8;
+  double actual_return_percent = 9;
+}
+
+message DeleteSignalRequest {
+  string id = 1;
+}
+
+message GetSignalsByDateRangeRequest {
+  google.protobuf.Timestamp start_date = 1;
+  google.protobuf.Timestamp end_date = 2;
+}
+
+message SignalResponse {
+  string id = 1;
+  string prediction_id = 2;
+  string symbol = 3;
+  string signal_type = 4;
+  string direction = 5;
+  double strength = 6;
+  double confidence = 7;
+  string status = 8;
+  google.protobuf.Timestamp generated_at = 9;
+  double actual_return_percent = 10;
+}
+
+message SignalListResponse {
+  repeated SignalResponse signals = 1;
+}
+
+message DeleteSignalResponse {
+  bool success = 1;
+  string message = 2;
+}

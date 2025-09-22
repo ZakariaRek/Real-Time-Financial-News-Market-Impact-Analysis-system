@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package com.alert_signals.grpc;
+
+option java_multiple_files = true;
+option java_package = "com.alert_signals.AlertSignal.grpc.generated";
+
+// Signal Rules Service
+service SignalRulesGrpcService {
+  rpc CreateRule(CreateRuleRequest) returns (RuleResponse);
+  rpc GetRule(GetRuleRequest) returns (RuleResponse);
+  rpc GetRuleByName(GetRuleByNameRequest) returns (RuleResponse);
+  rpc GetAllRules(GetAllRulesRequest) returns (RuleListResponse);
+  rpc GetRulesByType(GetRulesByTypeRequest) returns (RuleListResponse);
+  rpc GetActiveRules(GetActiveRulesRequest) returns (RuleListResponse);
+  rpc GetActiveRulesByType(GetActiveRulesByTypeRequest) returns (RuleListResponse);
+  rpc GetActiveRulesBySymbol(GetActiveRulesBySymbolRequest) returns (RuleListResponse);
+  rpc GetActiveRulesByMinSuccessRate(GetActiveRulesByMinSuccessRateRequest) returns (RuleListResponse);
+  rpc UpdateRule(UpdateRuleRequest) returns (RuleResponse);
+  rpc DeactivateRule(DeactivateRuleRequest) returns (DeactivateRuleResponse);
+  rpc DeleteRule(DeleteRuleRequest) returns (DeleteRuleResponse);
+}
+
+// Messages
+message CreateRuleRequest {
+  string rule_name = 1;
+  string rule_type = 2;
+  string conditions = 3;
+  repeated string symbols = 4;
+  double success_rate = 5;
+  bool is_active = 6;
+}
+
+message GetRuleRequest {
+  string id = 1;
+}
+
+message GetRuleByNameRequest {
+  string rule_name = 1;
+}
+
+message GetAllRulesRequest {
+}
+
+message GetRulesByTypeRequest {
+  string rule_type = 1;
+}
+
+message GetActiveRulesRequest {
+}
+
+message GetActiveRulesByTypeRequest {
+  string rule_type = 1;
+}
+
+message GetActiveRulesBySymbolRequest {
+  string symbol = 1;
+}
+
+message GetActiveRulesByMinSuccessRateRequest {
+  double min_success_rate = 1;
+}
+
+message UpdateRuleRequest {
+  string id = 1;
+  string rule_name = 2;
+  string rule_type = 3;
+  string conditions = 4;
+  repeated string symbols = 5;
+  double success_rate = 6;
+  bool is_active = 7;
+}
+
+message DeactivateRuleRequest {
+  string id = 1;
+}
+
+message DeleteRuleRequest {
+  string id = 1;
+}
+
+message RuleResponse {
+  string id = 1;
+  string rule_name = 2;
+  string rule_type = 3;
+  string conditions = 4;
+  repeated string symbols = 5;
+  double success_rate = 6;
+  bool is_active = 7;
+}
+
+message RuleListResponse {
+  repeated RuleResponse rules = 1;
+}
+
+message DeactivateRuleResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteRuleResponse {
+  bool success = 1;
+  string message = 2;
+}

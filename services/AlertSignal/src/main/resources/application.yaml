@@ -26,8 +26,22 @@ spring:
           preferred_uuid_jdbc_type: CHAR
 
 
-
-
+  grpc:
+    server:
+      port: 9090
+      max-inbound-message-size: 4MB
+      max-inbound-metadata-size: 8KB
+      keep-alive-time: 30s
+      keep-alive-timeout: 5s
+      keep-alive-without-calls: true
+      max-connection-idle: 60s
+      max-connection-age: 30s
+      max-connection-age-grace: 5s
+      permit-keep-alive-time: 10s
+      permit-keep-alive-without-calls: false
+      # Enable reflection for debugging tools
+      reflection:
+        enabled: true
 
 logging:
   level:
