@@ -21,9 +21,13 @@ public interface SignalRulesRepository extends JpaRepository<SignalRules, UUID> 
 
     List<SignalRules> findByRuleTypeAndIsActive(String ruleType, Boolean isActive);
 
-    @Query("SELECT sr FROM SignalRules sr WHERE :symbol = ANY(sr.symbols) AND sr.isActive = true")
+    // Fixed: Using native SQL query for PostgreSQL array operations
+    @Query(value = "SELECT * FROM signal_rules sr WHERE :symbol = ANY(sr.symbols) AND sr.is_active = true",
+            nativeQuery = true)
     List<SignalRules> findActiveRulesBySymbol(@Param("symbol") String symbol);
 
-    @Query("SELECT sr FROM SignalRules sr WHERE sr.successRate >= :minSuccessRate AND sr.isActive = true")
+    // Fixed: Using native SQL query for PostgreSQL numeric comparison
+    @Query(value = "SELECT * FROM signal_rules sr WHERE sr.success_rate >= :minSuccessRate AND sr.is_active = true",
+            nativeQuery = true)
     List<SignalRules> findActiveRulesByMinSuccessRate(@Param("minSuccessRate") Double minSuccessRate);
 }
