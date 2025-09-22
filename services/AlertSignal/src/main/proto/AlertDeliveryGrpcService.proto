@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package com.alert_signals.grpc;
+
+option java_multiple_files = true;
+option java_package = "com.alert_signals.AlertSignal.grpc.generated";
+
+import "google/protobuf/timestamp.proto";
+
+// Alert Delivery Service
+service AlertDeliveryGrpcService {
+  rpc LogDelivery(LogDeliveryRequest) returns (DeliveryLogResponse);
+  rpc GetDeliveryLog(GetDeliveryLogRequest) returns (DeliveryLogResponse);
+  rpc GetDeliveryLogsBySignalId(GetDeliveryLogsBySignalIdRequest) returns (DeliveryLogListResponse);
+  rpc GetDeliveryLogsBySubscriptionId(GetDeliveryLogsBySubscriptionIdRequest) returns (DeliveryLogListResponse);
+  rpc GetDeliveryLogsByStatus(GetDeliveryLogsByStatusRequest) returns (DeliveryLogListResponse);
+  rpc GetDeliveryLogsByMethod(GetDeliveryLogsByMethodRequest) returns (DeliveryLogListResponse);
+  rpc GetDeliveryLogsByDateRange(GetDeliveryLogsByDateRangeRequest) returns (DeliveryLogListResponse);
+  rpc GetAverageDeliveryLatency(GetAverageDeliveryLatencyRequest) returns (AverageLatencyResponse);
+  rpc GetSuccessfulDeliveryCount(GetSuccessfulDeliveryCountRequest) returns (DeliveryCountResponse);
+  rpc UpdateDeliveryLog(UpdateDeliveryLogRequest) returns (DeliveryLogResponse);
+}
+
+// Messages
+message LogDeliveryRequest {
+  string signal_id = 1;
+  string subscription_id = 2;
+  string delivery_method = 3;
+  string status = 4;
+  int32 delivery_latency_ms = 5;
+}
+
+message GetDeliveryLogRequest {
+  string id = 1;
+}
+
+message GetDeliveryLogsBySignalIdRequest {
+  string signal_id = 1;
+}
+
+message GetDeliveryLogsBySubscriptionIdRequest {
+  string subscription_id = 1;
+}
+
+message GetDeliveryLogsByStatusRequest {
+  string status = 1;
+}
+
+message GetDeliveryLogsByMethodRequest {
+  string delivery_method = 1;
+}
+
+message GetDeliveryLogsByDateRangeRequest {
+  google.protobuf.Timestamp start_date = 1;
+  google.protobuf.Timestamp end_date = 2;
+}
+
+message GetAverageDeliveryLatencyRequest {
+  string delivery_method = 1;
+}
+
+message GetSuccessfulDeliveryCountRequest {
+  string subscription_id = 1;
+}
+
+message UpdateDeliveryLogRequest {
+  string id = 1;
+  string signal_id = 2;
+  string subscription_id = 3;
+  string delivery_method = 4;
+  string status = 5;
+  google.protobuf.Timestamp sent_at = 6;
+  int32 delivery_latency_ms = 7;
+}
+
+message DeliveryLogResponse {
+  string id = 1;
+  string signal_id = 2;
+  string subscription_id = 3;
+  string delivery_method = 4;
+  string status = 5;
+  google.protobuf.Timestamp sent_at = 6;
+  int32 delivery_latency_ms = 7;
+}
+
+message DeliveryLogListResponse {
+  repeated DeliveryLogResponse delivery_logs = 1;
+}
+
+message AverageLatencyResponse {
+  double average_latency = 1;
+}
+
+message DeliveryCountResponse {
+  int64 count = 1;
+}
