@@ -5,8 +5,8 @@ spring:
   # Database Configuration
   datasource:
     url: jdbc:postgresql://localhost:5432/market_impact?currentSchema=public
-    username: ${DB_USERNAME:market_user}
-    password: ${DB_PASSWORD:market_pass}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:yahyasd56}
     driver-class-name: org.postgresql.Driver
     hikari:
       connection-timeout: 20000
@@ -16,10 +16,10 @@ spring:
       max-lifetime: 1200000
       leak-detection-threshold: 60000
 
-  # JPA Configuration
+  # JPA Configuration - CHANGED: validate to create-drop for development
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: create-drop  # Changed from 'validate' to auto-create tables
     show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
@@ -30,12 +30,9 @@ spring:
           time_zone: UTC
     open-in-view: false
 
-  # Flyway Configuration
+  # Flyway Configuration - DISABLED temporarily
   flyway:
-    enabled: true
-    baseline-on-migrate: true
-    locations: classpath:db/migration
-    schemas: public
+    enabled: false  # Disabled to prevent conflicts with hibernate auto-ddl
 
   # Redis Configuration
   data:
@@ -56,14 +53,6 @@ spring:
       port: 9090
 
 # Logging Configuration
-logging:
-  level:
-    com.market_impact.MarketImpact: ${LOG_LEVEL:INFO}
-    org.hibernate.SQL: ${SQL_LOG_LEVEL:WARN}
-    org.hibernate.type.descriptor.sql.BasicBinder: ${SQL_PARAM_LOG_LEVEL:WARN}
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
 # Management/Actuator Configuration
 management:
@@ -94,7 +83,7 @@ app:
 
 # Server Configuration
 server:
-  port: 8080
+  port: 8082
   servlet:
     context-path: /market-impact
   compression:
