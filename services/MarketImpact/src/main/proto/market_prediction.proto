@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+package com.market_impact;
+
+option java_package = "com.market_impact.grpc";
+option java_outer_classname = "MarketPredictionProto";
+option java_multiple_files = true;
+
+import "common.proto";
+import "risk_metrics.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Market Prediction Messages
+message MarketPrediction {
+  UUID id = 1;
+  UUID article_id = 2;
+  string symbol = 3;
+  Decimal predicted_change_percent = 4;
+  Direction direction = 5;
+  Decimal confidence = 6;
+  Decimal impact_score = 7;
+  string model_type = 8;
+  google.protobuf.Timestamp prediction_timestamp = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+  repeated RiskMetrics risk_metrics = 12;
+}
+
+message CreateMarketPredictionRequest {
+  UUID article_id = 1;
+  string symbol = 2;
+  Decimal predicted_change_percent = 3;
+  Direction direction = 4;
+  Decimal confidence = 5;
+  Decimal impact_score = 6;
+  string model_type = 7;
+  google.protobuf.Timestamp prediction_timestamp = 8;
+}
+
+message UpdateMarketPredictionRequest {
+  UUID id = 1;
+  optional UUID article_id = 2;
+  optional string symbol = 3;
+  optional Decimal predicted_change_percent = 4;
+  optional Direction direction = 5;
+  optional Decimal confidence = 6;
+  optional Decimal impact_score = 7;
+  optional string model_type = 8;
+  optional google.protobuf.Timestamp prediction_timestamp = 9;
+}
+
+message GetMarketPredictionRequest {
+  UUID id = 1;
+}
+
+message GetMarketPredictionResponse {
+  MarketPrediction prediction = 1;
+}
+
+message GetPredictionsBySymbolRequest {
+  string symbol = 1;
+  optional PageRequest page_request = 2;
+}
+
+message GetPredictionsBySymbolResponse {
+  repeated MarketPrediction predictions = 1;
+  optional PageResponse page_response = 2;
+}
+
+message GetRecentPredictionsRequest {
+  int32 hours = 1; // Number of hours back to look
+}
+
+message GetRecentPredictionsResponse {
+  repeated MarketPrediction predictions = 1;
+}
+
+message GetHighConfidencePredictionsRequest {
+  Decimal min_confidence = 1;
+}
+
+message GetHighConfidencePredictionsResponse {
+  repeated MarketPrediction predictions = 1;
+}
+
+message GetPredictionsByTimeRangeRequest {
+  string symbol = 1;
+  TimeRange time_range = 2;
+}
+
+message GetPredictionsByTimeRangeResponse {
+  repeated MarketPrediction predictions = 1;
+}
+
+message GetAvailableSymbolsRequest {
+  // Empty request
+}
+
+message GetAvailableSymbolsResponse {
+  repeated string symbols = 1;
+}
+
+message GetLatestPredictionRequest {
+  string symbol = 1;
+}
+
+message GetLatestPredictionResponse {
+  MarketPrediction prediction = 1;
+}
+
+message DeleteMarketPredictionRequest {
+  UUID id = 1;
+}
+
+// Market Prediction Summary (lighter version)
+message MarketPredictionSummary {
+  UUID id = 1;
+  string symbol = 2;
+  Decimal predicted_change_percent = 3;
+  Direction direction = 4;
+  Decimal confidence = 5;
+  string model_type = 6;
+  google.protobuf.Timestamp prediction_timestamp = 7;
+}
+
+message GetPredictionsSummaryRequest {
+  string symbol = 1;
+}
+
+message GetPredictionsSummaryResponse {
+  repeated MarketPredictionSummary summaries = 1;
+}
+
+// gRPC Service Definition
+service MarketPredictionService {
+  // CRUD operations
+  rpc CreatePrediction(CreateMarketPredictionRequest) returns (MarketPrediction);
+  rpc GetPrediction(GetMarketPredictionRequest) returns (GetMarketPredictionResponse);
+  rpc UpdatePrediction(UpdateMarketPredictionRequest) returns (MarketPrediction);
+  rpc DeletePrediction(DeleteMarketPredictionRequest) returns (google.protobuf.Empty);
+
+  // Query operations
+  rpc GetPredictionsBySymbol(GetPredictionsBySymbolRequest) returns (GetPredictionsBySymbolResponse);
+  rpc GetPredictionsSummary(GetPredictionsSummaryRequest) returns (GetPredictionsSummaryResponse);
+  rpc GetRecentPredictions(GetRecentPredictionsRequest) returns (GetRecentPredictionsResponse);
+  rpc GetHighConfidencePredictions(GetHighConfidencePredictionsRequest) returns (GetHighConfidencePredictionsResponse);
+  rpc GetPredictionsByTimeRange(GetPredictionsByTimeRangeRequest) returns (GetPredictionsByTimeRangeResponse);
+  rpc GetAvailableSymbols(GetAvailableSymbolsRequest) returns (GetAvailableSymbolsResponse);
+  rpc GetLatestPrediction(GetLatestPredictionRequest) returns (GetLatestPredictionResponse);
+}

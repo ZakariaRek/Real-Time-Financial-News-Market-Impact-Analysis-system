@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+package com.market_impact;
+
+option java_package = "com.market_impact.grpc";
+option java_outer_classname = "CorrelationAnalysisProto";
+option java_multiple_files = true;
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Correlation Analysis Messages
+message CorrelationAnalysis {
+  UUID id = 1;
+  string symbol = 2;
+  Date analysis_date = 3;
+  Decimal sentiment_price_correlation = 4;
+  Decimal immediate_correlation = 5;
+  Decimal short_term_correlation = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message CreateCorrelationAnalysisRequest {
+  string symbol = 1;
+  Date analysis_date = 2;
+  Decimal sentiment_price_correlation = 3;
+  Decimal immediate_correlation = 4;
+  Decimal short_term_correlation = 5;
+}
+
+message UpdateCorrelationAnalysisRequest {
+  UUID id = 1;
+  optional string symbol = 2;
+  optional Date analysis_date = 3;
+  optional Decimal sentiment_price_correlation = 4;
+  optional Decimal immediate_correlation = 5;
+  optional Decimal short_term_correlation = 6;
+}
+
+message GetCorrelationAnalysisRequest {
+  UUID id = 1;
+}
+
+message GetCorrelationAnalysisResponse {
+  CorrelationAnalysis analysis = 1;
+}
+
+message GetCorrelationAnalysisBySymbolRequest {
+  string symbol = 1;
+}
+
+message GetCorrelationAnalysisBySymbolResponse {
+  repeated CorrelationAnalysis analyses = 1;
+}
+
+message GetCorrelationAnalysisByDateRequest {
+  Date analysis_date = 1;
+}
+
+message GetCorrelationAnalysisByDateResponse {
+  repeated CorrelationAnalysis analyses = 1;
+}
+
+message GetCorrelationAnalysisBySymbolAndDateRequest {
+  string symbol = 1;
+  Date analysis_date = 2;
+}
+
+message GetCorrelationAnalysisBySymbolAndDateResponse {
+  CorrelationAnalysis analysis = 1;
+}
+
+message GetCorrelationAnalysisByDateRangeRequest {
+  string symbol = 1;
+  DateRange date_range = 2;
+}
+
+message GetCorrelationAnalysisByDateRangeResponse {
+  repeated CorrelationAnalysis analyses = 1;
+}
+
+message GetRecentCorrelationAnalysisRequest {
+  Date since_date = 1;
+}
+
+message GetRecentCorrelationAnalysisResponse {
+  repeated CorrelationAnalysis analyses = 1;
+}
+
+message GetHighSentimentCorrelationRequest {
+  Decimal threshold = 1;
+}
+
+message GetHighSentimentCorrelationResponse {
+  repeated CorrelationAnalysis analyses = 1;
+}
+
+message GetHighImmediateCorrelationRequest {
+  Decimal threshold = 1;
+}
+
+message GetHighImmediateCorrelationResponse {
+  repeated CorrelationAnalysis analyses = 1;
+}
+
+message GetHighShortTermCorrelationRequest {
+  Decimal threshold = 1;
+}
+
+message GetHighShortTermCorrelationResponse {
+  repeated CorrelationAnalysis analyses = 1;
+}
+
+message GetAverageSentimentCorrelationRequest {
+  string symbol = 1;
+  Date since_date = 2;
+}
+
+message GetAverageSentimentCorrelationResponse {
+  Decimal average_correlation = 1;
+}
+
+message GetLatestCorrelationAnalysisRequest {
+  string symbol = 1;
+}
+
+message GetLatestCorrelationAnalysisResponse {
+  CorrelationAnalysis analysis = 1;
+}
+
+message DeleteCorrelationAnalysisRequest {
+  UUID id = 1;
+}
+
+// Correlation Analysis Summary (lighter version)
+message CorrelationAnalysisSummary {
+  UUID id = 1;
+  string symbol = 2;
+  Date analysis_date = 3;
+  Decimal sentiment_price_correlation = 4;
+  Decimal immediate_correlation = 5;
+  Decimal short_term_correlation = 6;
+}
+
+// gRPC Service Definition
+service CorrelationAnalysisService {
+  // CRUD operations
+  rpc CreateCorrelationAnalysis(CreateCorrelationAnalysisRequest) returns (CorrelationAnalysis);
+  rpc GetCorrelationAnalysis(GetCorrelationAnalysisRequest) returns (GetCorrelationAnalysisResponse);
+  rpc UpdateCorrelationAnalysis(UpdateCorrelationAnalysisRequest) returns (CorrelationAnalysis);
+  rpc DeleteCorrelationAnalysis(DeleteCorrelationAnalysisRequest) returns (google.protobuf.Empty);
+
+  // Query operations
+  rpc GetCorrelationAnalysisBySymbol(GetCorrelationAnalysisBySymbolRequest) returns (GetCorrelationAnalysisBySymbolResponse);
+  rpc GetCorrelationAnalysisByDate(GetCorrelationAnalysisByDateRequest) returns (GetCorrelationAnalysisByDateResponse);
+  rpc GetCorrelationAnalysisBySymbolAndDate(GetCorrelationAnalysisBySymbolAndDateRequest) returns (GetCorrelationAnalysisBySymbolAndDateResponse);
+  rpc GetCorrelationAnalysisByDateRange(GetCorrelationAnalysisByDateRangeRequest) returns (GetCorrelationAnalysisByDateRangeResponse);
+  rpc GetRecentCorrelationAnalysis(GetRecentCorrelationAnalysisRequest) returns (GetRecentCorrelationAnalysisResponse);
+  rpc GetHighSentimentCorrelation(GetHighSentimentCorrelationRequest) returns (GetHighSentimentCorrelationResponse);
+  rpc GetHighImmediateCorrelation(GetHighImmediateCorrelationRequest) returns (GetHighImmediateCorrelationResponse);
+  rpc GetHighShortTermCorrelation(GetHighShortTermCorrelationRequest) returns (GetHighShortTermCorrelationResponse);
+  rpc GetAverageSentimentCorrelation(GetAverageSentimentCorrelationRequest) returns (GetAverageSentimentCorrelationResponse);
+  rpc GetLatestCorrelationAnalysis(GetLatestCorrelationAnalysisRequest) returns (GetLatestCorrelationAnalysisResponse);
+}

@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package com.market_impact;
+
+option java_package = "com.market_impact.grpc";
+option java_outer_classname = "RiskMetricsProto";
+option java_multiple_files = true;
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Risk Metrics Messages
+message RiskMetrics {
+  UUID id = 1;
+  UUID prediction_id = 2;
+  string symbol = 3;
+  Decimal var_95_1day = 4;
+  Decimal historical_volatility_30d = 5;
+  Decimal market_correlation = 6;
+  RiskLevel risk_level = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message CreateRiskMetricsRequest {
+  UUID prediction_id = 1;
+  string symbol = 2;
+  Decimal var_95_1day = 3;
+  Decimal historical_volatility_30d = 4;
+  Decimal market_correlation = 5;
+  RiskLevel risk_level = 6;
+}
+
+message UpdateRiskMetricsRequest {
+  UUID id = 1;
+  optional UUID prediction_id = 2;
+  optional string symbol = 3;
+  optional Decimal var_95_1day = 4;
+  optional Decimal historical_volatility_30d = 5;
+  optional Decimal market_correlation = 6;
+  optional RiskLevel risk_level = 7;
+}
+
+message GetRiskMetricsRequest {
+  UUID id = 1;
+}
+
+message GetRiskMetricsResponse {
+  RiskMetrics risk_metrics = 1;
+}
+
+message GetRiskMetricsBySymbolRequest {
+  string symbol = 1;
+}
+
+message GetRiskMetricsBySymbolResponse {
+  repeated RiskMetrics risk_metrics = 1;
+}
+
+message GetRiskMetricsByLevelRequest {
+  RiskLevel risk_level = 1;
+}
+
+message GetRiskMetricsByLevelResponse {
+  repeated RiskMetrics risk_metrics = 1;
+}
+
+message GetRiskMetricsByPredictionRequest {
+  UUID prediction_id = 1;
+}
+
+message GetRiskMetricsByPredictionResponse {
+  repeated RiskMetrics risk_metrics = 1;
+}
+
+message GetHighVaRMetricsRequest {
+  Decimal threshold = 1;
+}
+
+message GetHighVaRMetricsResponse {
+  repeated RiskMetrics risk_metrics = 1;
+}
+
+message GetHighVolatilityMetricsRequest {
+  Decimal threshold = 1;
+}
+
+message GetHighVolatilityMetricsResponse {
+  repeated RiskMetrics risk_metrics = 1;
+}
+
+message GetSymbolsByRiskLevelRequest {
+  RiskLevel risk_level = 1;
+}
+
+message GetSymbolsByRiskLevelResponse {
+  repeated string symbols = 1;
+}
+
+message GetAverageMarketCorrelationRequest {
+  string symbol = 1;
+}
+
+message GetAverageMarketCorrelationResponse {
+  Decimal average_correlation = 1;
+}
+
+message DeleteRiskMetricsRequest {
+  UUID id = 1;
+}
+
+// Risk Metrics Summary (lighter version)
+message RiskMetricsSummary {
+  UUID id = 1;
+  string symbol = 2;
+  Decimal var_95_1day = 3;
+  RiskLevel risk_level = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// gRPC Service Definition
+service RiskMetricsService {
+  // CRUD operations
+  rpc CreateRiskMetrics(CreateRiskMetricsRequest) returns (RiskMetrics);
+  rpc GetRiskMetrics(GetRiskMetricsRequest) returns (GetRiskMetricsResponse);
+  rpc UpdateRiskMetrics(UpdateRiskMetricsRequest) returns (RiskMetrics);
+  rpc DeleteRiskMetrics(DeleteRiskMetricsRequest) returns (google.protobuf.Empty);
+
+  // Query operations
+  rpc GetRiskMetricsBySymbol(GetRiskMetricsBySymbolRequest) returns (GetRiskMetricsBySymbolResponse);
+  rpc GetRiskMetricsByLevel(GetRiskMetricsByLevelRequest) returns (GetRiskMetricsByLevelResponse);
+  rpc GetRiskMetricsByPrediction(GetRiskMetricsByPredictionRequest) returns (GetRiskMetricsByPredictionResponse);
+  rpc GetHighVaRMetrics(GetHighVaRMetricsRequest) returns (GetHighVaRMetricsResponse);
+  rpc GetHighVolatilityMetrics(GetHighVolatilityMetricsRequest) returns (GetHighVolatilityMetricsResponse);
+  rpc GetSymbolsByRiskLevel(GetSymbolsByRiskLevelRequest) returns (GetSymbolsByRiskLevelResponse);
+  rpc GetAverageMarketCorrelation(GetAverageMarketCorrelationRequest) returns (GetAverageMarketCorrelationResponse);
+}
