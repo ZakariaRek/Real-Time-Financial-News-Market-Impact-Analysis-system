@@ -1,10 +1,11 @@
 package model
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"gorm.io/gorm"
-	"time"
 )
 
 type ProcessingStatus string

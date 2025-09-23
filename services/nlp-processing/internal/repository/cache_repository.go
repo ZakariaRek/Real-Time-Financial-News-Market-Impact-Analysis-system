@@ -1,4 +1,3 @@
-// services/nlp-processing/internal/repository/cache_repository.go
 package repository
 
 import (
@@ -8,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/model"
+	"github.com/redis/go-redis/v9"
 )
 
 type CacheRepository interface {
