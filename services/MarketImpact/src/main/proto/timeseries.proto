@@ -1,0 +1,292 @@
+syntax = "proto3";
+
+package com.market_impact.timeseries;
+
+option java_package = "com.market_impact.grpc.timeseries";
+option java_outer_classname = "TimeSeriesProto";
+option java_multiple_files = true;
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+
+
+// Market Data Time Series Messages
+message MarketDataTs {
+  google.protobuf.Timestamp timestamp = 1;
+  string symbol = 2;
+  com.market_impact.Decimal close_price = 3;
+  int64 volume = 4;
+  com.market_impact.Decimal price_change_percent = 5;
+  com.market_impact.Decimal volatility = 6;
+}
+
+message CreateMarketDataTsRequest {
+  google.protobuf.Timestamp timestamp = 1;
+  string symbol = 2;
+  com.market_impact.Decimal close_price = 3;
+  int64 volume = 4;
+  com.market_impact.Decimal price_change_percent = 5;
+  com.market_impact.Decimal volatility = 6;
+}
+
+message GetMarketDataTsBySymbolRequest {
+  string symbol = 1;
+}
+
+message GetMarketDataTsBySymbolResponse {
+  repeated MarketDataTs data = 1;
+}
+
+message GetMarketDataTsByTimeRangeRequest {
+  string symbol = 1;
+  com.market_impact.TimeRange time_range = 2;
+}
+
+message GetMarketDataTsByTimeRangeResponse {
+  repeated MarketDataTs data = 1;
+}
+
+message GetRecentMarketDataRequest {
+  google.protobuf.Timestamp since_timestamp = 1;
+}
+
+message GetRecentMarketDataResponse {
+  repeated MarketDataTs data = 1;
+}
+
+message GetLatestMarketDataRequest {
+  string symbol = 1;
+}
+
+message GetLatestMarketDataResponse {
+  MarketDataTs data = 1;
+}
+
+message GetLatestMarketDataLimitRequest {
+  string symbol = 1;
+  int32 limit = 2;
+}
+
+message GetLatestMarketDataLimitResponse {
+  repeated MarketDataTs data = 1;
+}
+
+message GetAveragePriceRequest {
+  string symbol = 1;
+  com.market_impact.TimeRange time_range = 2;
+}
+
+message GetAveragePriceResponse {
+  com.market_impact.Decimal average_price = 1;
+}
+
+message GetAverageVolumeRequest {
+  string symbol = 1;
+  com.market_impact.TimeRange time_range = 2;
+}
+
+message GetAverageVolumeResponse {
+  double average_volume = 1;
+}
+
+message GetPriceVolatilityRequest {
+  string symbol = 1;
+  com.market_impact.TimeRange time_range = 2;
+}
+
+message GetPriceVolatilityResponse {
+  com.market_impact.Decimal volatility = 1;
+}
+
+message GetHighVolatilityDataRequest {
+  com.market_impact.Decimal threshold = 1;
+}
+
+message GetHighVolatilityDataResponse {
+  repeated MarketDataTs data = 1;
+}
+
+message GetDistinctSymbolsRequest {
+  // Empty request
+}
+
+message GetDistinctSymbolsResponse {
+  repeated string symbols = 1;
+}
+
+// Market Data Analytics
+message MarketDataAnalytics {
+  string symbol = 1;
+  com.market_impact.Decimal average_price = 2;
+  double average_volume = 3;
+  com.market_impact.Decimal volatility = 4;
+  com.market_impact.Decimal min_price = 5;
+  com.market_impact.Decimal max_price = 6;
+  google.protobuf.Timestamp period_start = 7;
+  google.protobuf.Timestamp period_end = 8;
+  int64 data_points = 9;
+}
+
+// Prediction Performance Time Series Messages
+message PredictionPerformanceTs {
+  google.protobuf.Timestamp timestamp = 1;
+  string symbol = 2;
+  string model_version = 3;
+  com.market_impact.Decimal accuracy_rate = 4;
+  com.market_impact.Decimal sharpe_ratio = 5;
+  com.market_impact.Decimal win_rate = 6;
+}
+
+message CreatePredictionPerformanceTsRequest {
+  google.protobuf.Timestamp timestamp = 1;
+  string symbol = 2;
+  string model_version = 3;
+  com.market_impact.Decimal accuracy_rate = 4;
+  com.market_impact.Decimal sharpe_ratio = 5;
+  com.market_impact.Decimal win_rate = 6;
+}
+
+message GetPredictionPerformanceBySymbolRequest {
+  string symbol = 1;
+}
+
+message GetPredictionPerformanceBySymbolResponse {
+  repeated PredictionPerformanceTs performance = 1;
+}
+
+message GetPredictionPerformanceByModelRequest {
+  string model_version = 1;
+}
+
+message GetPredictionPerformanceByModelResponse {
+  repeated PredictionPerformanceTs performance = 1;
+}
+
+message GetPredictionPerformanceBySymbolAndModelRequest {
+  string symbol = 1;
+  string model_version = 2;
+}
+
+message GetPredictionPerformanceBySymbolAndModelResponse {
+  repeated PredictionPerformanceTs performance = 1;
+}
+
+message GetPredictionPerformanceByTimeRangeRequest {
+  string symbol = 1;
+  string model_version = 2;
+  com.market_impact.TimeRange time_range = 3;
+}
+
+message GetPredictionPerformanceByTimeRangeResponse {
+  repeated PredictionPerformanceTs performance = 1;
+}
+
+message GetRecentPredictionPerformanceRequest {
+  google.protobuf.Timestamp since_timestamp = 1;
+}
+
+message GetRecentPredictionPerformanceResponse {
+  repeated PredictionPerformanceTs performance = 1;
+}
+
+message GetHighAccuracyPerformanceRequest {
+  com.market_impact.Decimal threshold = 1;
+}
+
+message GetHighAccuracyPerformanceResponse {
+  repeated PredictionPerformanceTs performance = 1;
+}
+
+message GetLatestPredictionPerformanceRequest {
+  string symbol = 1;
+  string model_version = 2;
+}
+
+message GetLatestPredictionPerformanceResponse {
+  PredictionPerformanceTs performance = 1;
+}
+
+message GetAverageAccuracyRateRequest {
+  string symbol = 1;
+  string model_version = 2;
+  com.market_impact.TimeRange time_range = 3;
+}
+
+message GetAverageAccuracyRateResponse {
+  com.market_impact.Decimal average_accuracy = 1;
+}
+
+message GetAverageSharpeRatioRequest {
+  string symbol = 1;
+  string model_version = 2;
+  com.market_impact.TimeRange time_range = 3;
+}
+
+message GetAverageSharpeRatioResponse {
+  com.market_impact.Decimal average_sharpe = 1;
+}
+
+message GetAverageWinRateRequest {
+  string symbol = 1;
+  string model_version = 2;
+  com.market_impact.TimeRange time_range = 3;
+}
+
+message GetAverageWinRateResponse {
+  com.market_impact.Decimal average_win_rate = 1;
+}
+
+message GetDistinctModelVersionsRequest {
+  // Empty request
+}
+
+message GetDistinctModelVersionsResponse {
+  repeated string model_versions = 1;
+}
+
+// Prediction Performance Analytics
+message PredictionPerformanceAnalytics {
+  string symbol = 1;
+  string model_version = 2;
+  com.market_impact.Decimal average_accuracy_rate = 3;
+  com.market_impact.Decimal average_sharpe_ratio = 4;
+  com.market_impact.Decimal average_win_rate = 5;
+  com.market_impact.Decimal max_accuracy_rate = 6;
+  com.market_impact.Decimal min_accuracy_rate = 7;
+  google.protobuf.Timestamp period_start = 8;
+  google.protobuf.Timestamp period_end = 9;
+  int64 data_points = 10;
+}
+
+// gRPC Service Definitions
+service MarketDataTimeSeriesService {
+  // Market Data operations
+  rpc CreateMarketData(CreateMarketDataTsRequest) returns (MarketDataTs);
+  rpc GetMarketDataBySymbol(GetMarketDataTsBySymbolRequest) returns (GetMarketDataTsBySymbolResponse);
+  rpc GetMarketDataByTimeRange(GetMarketDataTsByTimeRangeRequest) returns (GetMarketDataTsByTimeRangeResponse);
+  rpc GetRecentMarketData(GetRecentMarketDataRequest) returns (GetRecentMarketDataResponse);
+  rpc GetLatestMarketData(GetLatestMarketDataRequest) returns (GetLatestMarketDataResponse);
+  rpc GetLatestMarketDataLimit(GetLatestMarketDataLimitRequest) returns (GetLatestMarketDataLimitResponse);
+  rpc GetAveragePrice(GetAveragePriceRequest) returns (GetAveragePriceResponse);
+  rpc GetAverageVolume(GetAverageVolumeRequest) returns (GetAverageVolumeResponse);
+  rpc GetPriceVolatility(GetPriceVolatilityRequest) returns (GetPriceVolatilityResponse);
+  rpc GetHighVolatilityData(GetHighVolatilityDataRequest) returns (GetHighVolatilityDataResponse);
+  rpc GetDistinctSymbols(GetDistinctSymbolsRequest) returns (GetDistinctSymbolsResponse);
+}
+
+service PredictionPerformanceTimeSeriesService {
+  // Prediction Performance operations
+  rpc CreatePredictionPerformance(CreatePredictionPerformanceTsRequest) returns (PredictionPerformanceTs);
+  rpc GetPredictionPerformanceBySymbol(GetPredictionPerformanceBySymbolRequest) returns (GetPredictionPerformanceBySymbolResponse);
+  rpc GetPredictionPerformanceByModel(GetPredictionPerformanceByModelRequest) returns (GetPredictionPerformanceByModelResponse);
+  rpc GetPredictionPerformanceBySymbolAndModel(GetPredictionPerformanceBySymbolAndModelRequest) returns (GetPredictionPerformanceBySymbolAndModelResponse);
+  rpc GetPredictionPerformanceByTimeRange(GetPredictionPerformanceByTimeRangeRequest) returns (GetPredictionPerformanceByTimeRangeResponse);
+  rpc GetRecentPredictionPerformance(GetRecentPredictionPerformanceRequest) returns (GetRecentPredictionPerformanceResponse);
+  rpc GetHighAccuracyPerformance(GetHighAccuracyPerformanceRequest) returns (GetHighAccuracyPerformanceResponse);
+  rpc GetLatestPredictionPerformance(GetLatestPredictionPerformanceRequest) returns (GetLatestPredictionPerformanceResponse);
+  rpc GetAverageAccuracyRate(GetAverageAccuracyRateRequest) returns (GetAverageAccuracyRateResponse);
+  rpc GetAverageSharpeRatio(GetAverageSharpeRatioRequest) returns (GetAverageSharpeRatioResponse);
+  rpc GetAverageWinRate(GetAverageWinRateRequest) returns (GetAverageWinRateResponse);
+  rpc GetDistinctSymbols(GetDistinctSymbolsRequest) returns (GetDistinctSymbolsResponse);
+  rpc GetDistinctModelVersions(GetDistinctModelVersionsRequest) returns (GetDistinctModelVersionsResponse);
+}

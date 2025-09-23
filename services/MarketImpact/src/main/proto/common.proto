@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package com.market_impact;
+
+option java_package = "com.market_impact.grpc";
+option java_outer_classname = "CommonProto";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+
+// Common enums
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  UP = 1;
+  DOWN = 2;
+  NEUTRAL = 3;
+}
+
+enum RiskLevel {
+  RISK_LEVEL_UNSPECIFIED = 0;
+  LOW = 1;
+  MEDIUM = 2;
+  HIGH = 3;
+  CRITICAL = 4;
+}
+
+// Common messages
+message Timestamp {
+  google.protobuf.Timestamp value = 1;
+}
+
+message Date {
+  int32 year = 1;
+  int32 month = 2;  // 1-12
+  int32 day = 3;    // 1-31
+}
+
+message Decimal {
+  // Represents decimal values as string to avoid precision loss
+  string value = 1;
+}
+
+message UUID {
+  string value = 1;
+}
+
+// Common request/response patterns
+message PageRequest {
+  int32 page = 1;
+  int32 size = 2;
+  string sort = 3;
+}
+
+message PageResponse {
+  int32 page = 1;
+  int32 size = 2;
+  int32 total_pages = 3;
+  int64 total_elements = 4;
+  bool first = 5;
+  bool last = 6;
+}
+
+// Time range filter
+message TimeRange {
+  google.protobuf.Timestamp start_time = 1;
+  google.protobuf.Timestamp end_time = 2;
+}
+
+message DateRange {
+  Date start_date = 1;
+  Date end_date = 2;
+}

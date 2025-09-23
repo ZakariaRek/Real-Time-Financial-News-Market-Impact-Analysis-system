@@ -5,7 +5,9 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/alertsignal_db
     username: postgres
-    password: yahyasd56
+#    password: yahyasd56
+    password: zakaria
+
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20

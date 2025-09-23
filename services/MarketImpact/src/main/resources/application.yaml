@@ -1,12 +1,22 @@
 spring:
+
+
   application:
+    grpc:
+      server:
+        port: 9090
+        enable-reflection: true  # Enable for development
+        max-inbound-message-size: 4MB
+        max-inbound-metadata-size: 8KB
     name: MarketImpact
 
   # Database Configuration
   datasource:
     url: jdbc:postgresql://localhost:5432/market_impact?currentSchema=public
     username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:yahyasd56}
+    password: ${DB_PASSWORD:zakaria}
+#    password: ${DB_PASSWORD:yahyasd56}
+
     driver-class-name: org.postgresql.Driver
     hikari:
       connection-timeout: 20000
@@ -84,9 +94,16 @@ app:
 # Server Configuration
 server:
   port: 8082
+
   servlet:
     context-path: /market-impact
   compression:
     enabled: true
   http2:
     enabled: true
+
+logging:
+  level:
+    io.grpc: DEBUG
+    com.market_impact.grpc: DEBUG
+
