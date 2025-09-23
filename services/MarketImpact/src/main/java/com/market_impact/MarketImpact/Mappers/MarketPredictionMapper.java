@@ -2,12 +2,16 @@ package com.market_impact.MarketImpact.Mappers;
 
 import com.market_impact.MarketImpact.dto.MarketPredictionDto;
 import com.market_impact.MarketImpact.entity.MarketPrediction;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 
 @Component
+@RequiredArgsConstructor
 public class MarketPredictionMapper {
+
+    private final RiskMetricsMapper riskMetricsMapper;
 
     public MarketPrediction toEntity(MarketPredictionDto.Request request) {
         if (request == null) {
@@ -46,7 +50,7 @@ public class MarketPredictionMapper {
                 .updatedAt(entity.getUpdatedAt())
                 .riskMetrics(entity.getRiskMetrics() != null ?
                         entity.getRiskMetrics().stream()
-                                .map(this::toRiskMetricsResponse)
+                                .map(riskMetricsMapper::toResponse)
                                 .toList() : null)
                 .build();
     }
@@ -96,12 +100,5 @@ public class MarketPredictionMapper {
         if (request.getPredictionTimestamp() != null) {
             entity.setPredictionTimestamp(request.getPredictionTimestamp());
         }
-    }
-
-    // Helper method for risk metrics - we'll need to create this mapper too
-    private com.market_impact.MarketImpact.dto.RiskMetricsDto.Response toRiskMetricsResponse(
-            com.market_impact.MarketImpact.entity.RiskMetrics riskMetrics) {
-        // This will be implemented when we create the RiskMetricsMapper
-        return null;
     }
 }

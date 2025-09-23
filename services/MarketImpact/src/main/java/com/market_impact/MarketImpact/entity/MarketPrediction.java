@@ -17,7 +17,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "market_predictions")
-@Data
+@Data  // This generates getters, setters, equals, hashCode, toString
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
