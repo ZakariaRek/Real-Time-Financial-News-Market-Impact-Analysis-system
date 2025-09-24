@@ -1,18 +1,15 @@
+// services/news-ingestion/internal/service/ingestion_service.go
 package service
 
-/*
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
-	"encoding/xml"
+	"crypto/sha256"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/client"
@@ -33,13 +30,14 @@ type ingestionService struct {
 	processingLogRepo repository.ProcessingLogRepository
 	rateLimitRepo     repository.RateLimitRepository
 	deduplicationSvc  DeduplicationService
-	scraperSvc        ScraperService
-	newsAPIClient     client.NewsAPIClient
-	rssClient         client.RSSClient
-	twitterClient     client.TwitterClient
-	rateLimitManager  *RateLimitManager
-	symbolExtractor   *SymbolExtractor
-	contentValidator  *ContentValidator
+
+	newsAPIClient client.NewsAPIClient
+	rssClient     client.RSSClient
+	twitterClient client.TwitterClient
+
+	rateLimitManager *RateLimitManager
+	symbolExtractor  *SymbolExtractor
+	contentValidator *ContentValidator
 }
 
 type RateLimitManager struct {
@@ -61,7 +59,6 @@ func NewIngestionService(
 	processingLogRepo repository.ProcessingLogRepository,
 	rateLimitRepo repository.RateLimitRepository,
 	deduplicationSvc DeduplicationService,
-	scraperSvc ScraperService,
 	newsAPIClient client.NewsAPIClient,
 	rssClient client.RSSClient,
 	twitterClient client.TwitterClient,
@@ -71,6 +68,8 @@ func NewIngestionService(
 		"AAPL": true, "GOOGL": true, "MSFT": true, "AMZN": true, "TSLA": true,
 		"META": true, "NVDA": true, "AMD": true, "NFLX": true, "CRM": true,
 		"BTC": true, "ETH": true, "SPY": true, "QQQ": true, "GLD": true,
+		"JPM": true, "BAC": true, "WFC": true, "GS": true, "C": true,
+		"XOM": true, "CVX": true, "PG": true, "JNJ": true, "V": true,
 	}
 
 	return &ingestionService{
@@ -79,7 +78,6 @@ func NewIngestionService(
 		processingLogRepo: processingLogRepo,
 		rateLimitRepo:     rateLimitRepo,
 		deduplicationSvc:  deduplicationSvc,
-		scraperSvc:        scraperSvc,
 		newsAPIClient:     newsAPIClient,
 		rssClient:         rssClient,
 		twitterClient:     twitterClient,
@@ -98,14 +96,22 @@ func (s *ingestionService) IngestFromRSS(ctx context.Context) error {
 		return fmt.Errorf("failed to get active sources: %w", err)
 	}
 
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(sources))
-
+	var rssSources []*model.NewsSource
 	for _, source := range sources {
-		if source.SourceType != "RSS" {
-			continue
+		if strings.ToUpper(source.SourceType) == "RSS" {
+			rssSources = append(rssSources, source)
 		}
+	}
 
+	if len(rssSources) == 0 {
+		logrus.Info("No RSS sources configured")
+		return nil
+	}
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(rssSources))
+
+	for _, source := range rssSources {
 		wg.Add(1)
 		go func(src *model.NewsSource) {
 			defer wg.Done()
@@ -121,6 +127,7 @@ func (s *ingestionService) IngestFromRSS(ctx context.Context) error {
 	var errors []string
 	for err := range errChan {
 		errors = append(errors, err.Error())
+		logrus.WithError(err).Error("RSS ingestion error")
 	}
 
 	if len(errors) > 0 {
@@ -191,14 +198,22 @@ func (s *ingestionService) IngestFromNewsAPI(ctx context.Context) error {
 		return fmt.Errorf("failed to get active sources: %w", err)
 	}
 
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(sources))
-
+	var apiSources []*model.NewsSource
 	for _, source := range sources {
-		if source.SourceType != "API" {
-			continue
+		if strings.ToUpper(source.SourceType) == "API" || strings.ToUpper(source.SourceType) == "NEWSAPI" {
+			apiSources = append(apiSources, source)
 		}
+	}
 
+	if len(apiSources) == 0 {
+		logrus.Info("No NewsAPI sources configured")
+		return nil
+	}
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(apiSources))
+
+	for _, source := range apiSources {
 		wg.Add(1)
 		go func(src *model.NewsSource) {
 			defer wg.Done()
@@ -214,6 +229,7 @@ func (s *ingestionService) IngestFromNewsAPI(ctx context.Context) error {
 	var errors []string
 	for err := range errChan {
 		errors = append(errors, err.Error())
+		logrus.WithError(err).Error("NewsAPI ingestion error")
 	}
 
 	if len(errors) > 0 {
@@ -231,14 +247,29 @@ func (s *ingestionService) ingestFromNewsAPISource(ctx context.Context, source *
 		return nil
 	}
 
-	// Fetch articles from NewsAPI
-	articles, err := s.newsAPIClient.GetFinancialNews(ctx, "financial")
-	if err != nil {
-		return fmt.Errorf("failed to fetch NewsAPI articles: %w", err)
+	// Fetch articles from NewsAPI with financial keywords
+	queries := []string{"financial", "stock market", "earnings", "nasdaq", "dow jones"}
+	var allArticles []*client.NewsAPIArticle
+
+	for _, query := range queries {
+		articles, err := s.newsAPIClient.GetFinancialNews(ctx, query)
+		if err != nil {
+			logrus.WithError(err).Warnf("Failed to fetch NewsAPI articles for query: %s", query)
+			continue
+		}
+		allArticles = append(allArticles, articles...)
 	}
 
 	var processedCount int
-	for _, apiArticle := range articles {
+	seenURLs := make(map[string]bool) // Deduplicate within the same batch
+
+	for _, apiArticle := range allArticles {
+		// Skip duplicates within the same batch
+		if seenURLs[apiArticle.URL] {
+			continue
+		}
+		seenURLs[apiArticle.URL] = true
+
 		article := &model.Article{
 			SourceID:         source.ID,
 			Title:            apiArticle.Title,
@@ -247,6 +278,11 @@ func (s *ingestionService) ingestFromNewsAPISource(ctx context.Context, source *
 			PublishedAt:      apiArticle.PublishedAt,
 			ProcessingStatus: model.StatusPending,
 			ContentHash:      s.generateContentHash(apiArticle.Title + apiArticle.Content),
+		}
+
+		// Use description as content if main content is empty
+		if article.Content == "" {
+			article.Content = apiArticle.Description
 		}
 
 		// Validate and enrich article
@@ -284,11 +320,19 @@ func (s *ingestionService) IngestFromTwitter(ctx context.Context) error {
 		return fmt.Errorf("failed to get active sources: %w", err)
 	}
 
+	var twitterSources []*model.NewsSource
 	for _, source := range sources {
-		if source.SourceType != "TWITTER" {
-			continue
+		if strings.ToUpper(source.SourceType) == "TWITTER" {
+			twitterSources = append(twitterSources, source)
 		}
+	}
 
+	if len(twitterSources) == 0 {
+		logrus.Info("No Twitter sources configured")
+		return nil
+	}
+
+	for _, source := range twitterSources {
 		// Check rate limits
 		if !s.rateLimitManager.CanMakeRequest(ctx, source.ID, source.RateLimitPerMinute) {
 			logrus.Warnf("Rate limit exceeded for source: %s", source.Name)
@@ -297,7 +341,7 @@ func (s *ingestionService) IngestFromTwitter(ctx context.Context) error {
 
 		tweets, err := s.twitterClient.GetFinancialTweets(ctx, []string{"$AAPL", "$GOOGL", "$TSLA"})
 		if err != nil {
-			logrus.WithError(err).Errorf("Failed to fetch tweets for source: %s", source.Name)
+			logrus.WithError(err).Warnf("Failed to fetch tweets for source: %s", source.Name)
 			continue
 		}
 
@@ -382,9 +426,9 @@ func (s *ingestionService) validateAndEnrichArticle(ctx context.Context, article
 }
 
 func (s *ingestionService) generateContentHash(content string) string {
-	hasher := md5.New()
+	hasher := sha256.New()
 	hasher.Write([]byte(content))
-	return hex.EncodeToString(hasher.Sum(nil))
+	return fmt.Sprintf("%x", hasher.Sum(nil))
 }
 
 func (s *ingestionService) calculateRelevanceScore(article *model.Article) float64 {
@@ -396,7 +440,7 @@ func (s *ingestionService) calculateRelevanceScore(article *model.Article) float
 	}
 
 	// Check for financial keywords
-	financialKeywords := []string{"earnings", "revenue", "profit", "loss", "market", "stock", "trading", "investment"}
+	financialKeywords := []string{"earnings", "revenue", "profit", "loss", "market", "stock", "trading", "investment", "financial", "nasdaq", "dow", "s&p"}
 	content := strings.ToLower(article.Title + " " + article.Content)
 
 	for _, keyword := range financialKeywords {
@@ -413,9 +457,35 @@ func (s *ingestionService) calculateRelevanceScore(article *model.Article) float
 	return score
 }
 
+// Update the logProcessingStep method in ingestion_service.go
+
 func (s *ingestionService) logProcessingStep(ctx context.Context, articleID interface{}, stage, status, errorMsg string) {
+	// Convert articleID to UUID
+	var articleUUID uuid.UUID
+	var err error
+
+	switch v := articleID.(type) {
+	case uuid.UUID:
+		articleUUID = v
+	case string:
+		articleUUID, err = uuid.Parse(v)
+		if err != nil {
+			logrus.WithError(err).Errorf("Failed to parse article ID as UUID: %v", v)
+			return
+		}
+	case fmt.Stringer:
+		articleUUID, err = uuid.Parse(v.String())
+		if err != nil {
+			logrus.WithError(err).Errorf("Failed to parse article ID as UUID: %v", v.String())
+			return
+		}
+	default:
+		logrus.Errorf("Invalid article ID type: %T", v)
+		return
+	}
+
 	log := &model.ArticleProcessingLog{
-		ArticleID:       articleID.(interface{ String() string }).String(),
+		ArticleID:       articleUUID,
 		ProcessingStage: stage,
 		Status:          status,
 		ErrorMessage:    errorMsg,
@@ -425,6 +495,9 @@ func (s *ingestionService) logProcessingStep(ctx context.Context, articleID inte
 		logrus.WithError(err).Error("Failed to log processing step")
 	}
 }
+
+// Also need to import uuid at the top of the file:
+// import "github.com/google/uuid"
 
 // Rate limit manager methods
 func (rlm *RateLimitManager) CanMakeRequest(ctx context.Context, sourceID uint, rateLimit int) bool {
@@ -455,17 +528,20 @@ func (se *SymbolExtractor) ExtractFromText(text string) []string {
 	words := strings.Fields(strings.ToUpper(text))
 
 	for _, word := range words {
+		// Clean the word of punctuation
+		cleanWord := strings.Trim(word, ".,!?;:")
+
 		// Check for ticker symbols with $ prefix
-		if strings.HasPrefix(word, "$") {
-			symbol := strings.TrimPrefix(word, "$")
+		if strings.HasPrefix(cleanWord, "$") {
+			symbol := strings.TrimPrefix(cleanWord, "$")
 			if len(symbol) >= 1 && len(symbol) <= 5 {
 				symbols = append(symbols, symbol)
 			}
 		}
 
 		// Check against known symbols
-		if se.financialSymbols[word] {
-			symbols = append(symbols, word)
+		if se.financialSymbols[cleanWord] {
+			symbols = append(symbols, cleanWord)
 		}
 	}
 
@@ -499,4 +575,3 @@ func (cv *ContentValidator) IsValid(content string) bool {
 
 	return true
 }
-*/

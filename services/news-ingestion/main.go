@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/client"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/database"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/handler"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/repository"
@@ -74,11 +75,34 @@ func main() {
 	articleRepo := repository.NewArticleRepository(db.DB)
 	sourceRepo := repository.NewSourceRepository(db.DB)
 	logRepo := repository.NewProcessingLogRepository(db.DB)
+	rateLimitRepo := repository.NewRateLimitRepository(db.DB)
+
+	// Initialize clients
+	newsAPIClient := client.NewNewsAPIClient(
+		viper.GetString("news_sources.newsapi.api_key"),
+		viper.GetString("news_sources.newsapi.base_url"),
+	)
+
+	rssClient := client.NewRSSClient()
+
+	twitterClient := client.NewTwitterClient(
+		viper.GetString("news_sources.twitter.bearer_token"),
+		viper.GetString("news_sources.twitter.base_url"),
+	)
 
 	// Initialize services
-	// Note: You'll need to implement these services
-	var ingestionService service.IngestionService
-	// ingestionService = service.NewIngestionService(articleRepo, sourceRepo, logRepo)
+	deduplicationService := service.NewDeduplicationService(articleRepo)
+
+	ingestionService := service.NewIngestionService(
+		articleRepo,
+		sourceRepo,
+		logRepo,
+		rateLimitRepo,
+		deduplicationService,
+		newsAPIClient,
+		rssClient,
+		twitterClient,
+	)
 
 	// Initialize handlers
 	httpHandler := handler.NewHTTPHandler(ingestionService, articleRepo, sourceRepo)
@@ -232,6 +256,10 @@ func setupGRPCServer(grpcHandler *handler.GRPCHandler, port int) *grpc.Server {
 
 	grpcServer := grpc.NewServer(opts...)
 
+	// Register the service
+	// Note: You'll need to import the generated protobuf code
+	// newsv1.RegisterNewsServiceServer(grpcServer, grpcHandler)
+
 	// Enable reflection for development
 	if viper.GetString("server.environment") != "production" {
 		reflection.Register(grpcServer)
@@ -256,7 +284,7 @@ func initConfig() error {
 	viper.SetDefault("database.postgres.port", 5432)
 	viper.SetDefault("database.postgres.database", "news_ingestion")
 	viper.SetDefault("database.postgres.username", "postgres")
-	viper.SetDefault("database.postgres.password", "zakaria")
+	viper.SetDefault("database.postgres.password", "yahyasd56") // zakaria
 	viper.SetDefault("database.postgres.ssl_mode", "disable")
 	viper.SetDefault("database.postgres.max_open_conns", 25)
 	viper.SetDefault("database.postgres.max_idle_conns", 5)
@@ -264,6 +292,10 @@ func initConfig() error {
 	viper.SetDefault("database.postgres.conn_max_idle_time", "1m")
 	viper.SetDefault("logging.level", "info")
 	viper.SetDefault("logging.format", "text")
+	viper.SetDefault("news_sources.newsapi.api_key", "")
+	viper.SetDefault("news_sources.newsapi.base_url", "https://newsapi.org/v2")
+	viper.SetDefault("news_sources.twitter.bearer_token", "")
+	viper.SetDefault("news_sources.twitter.base_url", "https://api.twitter.com/2")
 
 	// Read environment variables with prefix
 	viper.SetEnvPrefix("NEWS")
