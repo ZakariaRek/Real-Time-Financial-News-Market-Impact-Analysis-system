@@ -23,6 +23,7 @@ import (
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/handler"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/repository"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/service"
+	newsv1 "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/proto/services/news-ingestion/proto/gen"
 )
 
 func main() {
@@ -152,6 +153,7 @@ func main() {
 		}
 
 		logrus.Infof("Starting gRPC server on port %d", grpcPort)
+		logrus.Infof("gRPC reflection enabled for development")
 
 		if err := grpcServer.Serve(lis); err != nil {
 			logrus.Fatalf("gRPC server failed to start: %v", err)
@@ -256,15 +258,14 @@ func setupGRPCServer(grpcHandler *handler.GRPCHandler, port int) *grpc.Server {
 
 	grpcServer := grpc.NewServer(opts...)
 
-	// Register the service
-	// Note: You'll need to import the generated protobuf code
-	// newsv1.RegisterNewsServiceServer(grpcServer, grpcHandler)
+	// Register the NewsService with the gRPC server
+	newsv1.RegisterNewsServiceServer(grpcServer, grpcHandler)
 
-	// Enable reflection for development
-	if viper.GetString("server.environment") != "production" {
-		reflection.Register(grpcServer)
-		logrus.Info("gRPC reflection enabled for development")
-	}
+	logrus.Info("NewsService registered with gRPC server")
+
+	// Enable reflection for development (allows tools like grpcui and Postman to discover services)
+	reflection.Register(grpcServer)
+	logrus.Info("gRPC reflection enabled")
 
 	return grpcServer
 }
@@ -284,7 +285,7 @@ func initConfig() error {
 	viper.SetDefault("database.postgres.port", 5432)
 	viper.SetDefault("database.postgres.database", "news_ingestion")
 	viper.SetDefault("database.postgres.username", "postgres")
-	viper.SetDefault("database.postgres.password", "yahyasd56") // zakaria
+	viper.SetDefault("database.postgres.password", "yahyasd56")
 	viper.SetDefault("database.postgres.ssl_mode", "disable")
 	viper.SetDefault("database.postgres.max_open_conns", 25)
 	viper.SetDefault("database.postgres.max_idle_conns", 5)

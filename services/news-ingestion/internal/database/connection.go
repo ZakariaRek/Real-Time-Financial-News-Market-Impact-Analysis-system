@@ -111,6 +111,11 @@ func NewConnection(cfg Config) (*Database, error) {
 }
 
 func (d *Database) AutoMigrate() error {
+	// Enable UUID extension first
+	if err := d.enableUUIDExtension(); err != nil {
+		logrus.WithError(err).Warn("Failed to enable UUID extension, continuing anyway")
+	}
+
 	// Run database migrations
 	// In production with AWS RDS, consider using golang-migrate for better control
 	err := d.DB.AutoMigrate(
@@ -124,6 +129,22 @@ func (d *Database) AutoMigrate() error {
 	}
 
 	logrus.Info("Database migrations completed successfully")
+	return nil
+}
+
+func (d *Database) enableUUIDExtension() error {
+	// Enable uuid-ossp extension for PostgreSQL
+	err := d.DB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"").Error
+	if err != nil {
+		return fmt.Errorf("failed to enable UUID extension: %w", err)
+	}
+
+	// Also try pgcrypto for gen_random_uuid() if uuid-ossp is not available
+	err = d.DB.Exec("CREATE EXTENSION IF NOT EXISTS \"pgcrypto\"").Error
+	if err != nil {
+		logrus.WithError(err).Debug("Failed to enable pgcrypto extension")
+	}
+
 	return nil
 }
 
@@ -143,6 +164,7 @@ func (d *Database) CreateIndexes() error {
 		"CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_articles_symbols_gin ON articles USING GIN(symbols)",
 		"CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_rate_limit_source_time ON rate_limit_tracking(source_id, time_window)",
 		"CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_processing_logs_stage_status ON article_processing_logs(processing_stage, status)",
+		"CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_rate_limit_source_window ON rate_limit_tracking(source_id, time_window)",
 	}
 
 	for _, index := range indexes {
