@@ -1,3 +1,4 @@
+// services/news-ingestion/internal/model/article.go
 package model
 
 import (
@@ -18,7 +19,7 @@ const (
 )
 
 type Article struct {
-	ID               uuid.UUID        `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ID               uuid.UUID        `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	SourceID         uint             `gorm:"not null;index" json:"source_id"`
 	Source           NewsSource       `gorm:"foreignKey:SourceID" json:"source,omitempty"`
 	Title            string           `gorm:"type:text;not null" json:"title"`
@@ -26,7 +27,7 @@ type Article struct {
 	URL              string           `gorm:"type:text;not null" json:"url"`
 	Symbols          pq.StringArray   `gorm:"type:text[]" json:"symbols"`
 	PublishedAt      time.Time        `gorm:"not null;index" json:"published_at"`
-	ProcessingStatus ProcessingStatus `gorm:"default:pending;index" json:"processing_status"`
+	ProcessingStatus ProcessingStatus `gorm:"type:varchar(50);default:'pending';index" json:"processing_status"`
 	RelevanceScore   float64          `gorm:"type:decimal(5,4);default:0.0000" json:"relevance_score"`
 	ContentHash      string           `gorm:"uniqueIndex;not null" json:"content_hash"`
 	CreatedAt        time.Time        `json:"created_at"`
@@ -34,10 +35,18 @@ type Article struct {
 	DeletedAt        gorm.DeletedAt   `gorm:"index" json:"-"`
 }
 
+// BeforeCreate hook to ensure UUID is generated
+func (a *Article) BeforeCreate(tx *gorm.DB) (err error) {
+	if a.ID == uuid.Nil {
+		a.ID = uuid.New()
+	}
+	return
+}
+
 type ArticleProcessingLog struct {
 	ID               uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	ArticleID        uuid.UUID `gorm:"type:uuid;not null;index" json:"article_id"`
-	Article          Article   `gorm:"foreignKey:ArticleID" json:"article,omitempty"`
+	Article          Article   `gorm:"foreignKey:ArticleID;references:ID" json:"article,omitempty"`
 	ProcessingStage  string    `gorm:"not null" json:"processing_stage"` // ingestion, validation, nlp_processing
 	Status           string    `gorm:"not null" json:"status"`           // started, completed, failed
 	ProcessingTimeMs int       `gorm:"default:0" json:"processing_time_ms"`
@@ -53,4 +62,9 @@ type RateLimitTracking struct {
 	RequestCount int        `gorm:"default:0" json:"request_count"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+// Add unique constraint on source_id and time_window
+func (RateLimitTracking) TableName() string {
+	return "rate_limit_tracking"
 }

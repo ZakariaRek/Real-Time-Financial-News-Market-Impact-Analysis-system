@@ -1,3 +1,4 @@
+// services/news-ingestion/internal/handler/grpc_handler.go
 package handler
 
 import (
@@ -20,11 +21,11 @@ import (
 )
 
 type GRPCHandler struct {
-	newsv1.UnimplementedNewsServiceServer
-	ingestionService service.IngestionService
-	articleRepo      repository.ArticleRepository
-	sourceRepo       repository.SourceRepository
-	logRepo          repository.ProcessingLogRepository
+	newsv1.UnimplementedNewsServiceServer // This is crucial for forward compatibility
+	ingestionService                      service.IngestionService
+	articleRepo                           repository.ArticleRepository
+	sourceRepo                            repository.SourceRepository
+	logRepo                               repository.ProcessingLogRepository
 }
 
 func NewGRPCHandler(
@@ -43,6 +44,8 @@ func NewGRPCHandler(
 
 // Article operations
 func (h *GRPCHandler) CreateArticle(ctx context.Context, req *newsv1.CreateArticleRequest) (*newsv1.CreateArticleResponse, error) {
+	logrus.Infof("gRPC CreateArticle called with title: %s", req.Title)
+
 	// Validate request
 	if req.Title == "" || req.Url == "" {
 		return nil, status.Error(codes.InvalidArgument, "title and url are required")
@@ -80,6 +83,8 @@ func (h *GRPCHandler) CreateArticle(ctx context.Context, req *newsv1.CreateArtic
 }
 
 func (h *GRPCHandler) GetArticle(ctx context.Context, req *newsv1.GetArticleRequest) (*newsv1.GetArticleResponse, error) {
+	logrus.Infof("gRPC GetArticle called with ID: %s", req.Id)
+
 	id, err := uuid.Parse(req.Id)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid article ID format")
@@ -97,6 +102,8 @@ func (h *GRPCHandler) GetArticle(ctx context.Context, req *newsv1.GetArticleRequ
 }
 
 func (h *GRPCHandler) ListArticles(ctx context.Context, req *newsv1.ListArticlesRequest) (*newsv1.ListArticlesResponse, error) {
+	logrus.Infof("gRPC ListArticles called with limit: %d", req.Limit)
+
 	limit := int(req.Limit)
 	if limit <= 0 || limit > 100 {
 		limit = 50
@@ -139,6 +146,8 @@ func (h *GRPCHandler) ListArticles(ctx context.Context, req *newsv1.ListArticles
 }
 
 func (h *GRPCHandler) UpdateArticleStatus(ctx context.Context, req *newsv1.UpdateArticleStatusRequest) (*newsv1.UpdateArticleStatusResponse, error) {
+	logrus.Infof("gRPC UpdateArticleStatus called for ID: %s, status: %s", req.Id, req.Status)
+
 	id, err := uuid.Parse(req.Id)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid article ID format")
@@ -157,6 +166,8 @@ func (h *GRPCHandler) UpdateArticleStatus(ctx context.Context, req *newsv1.Updat
 }
 
 func (h *GRPCHandler) DeleteArticle(ctx context.Context, req *newsv1.DeleteArticleRequest) (*newsv1.DeleteArticleResponse, error) {
+	logrus.Infof("gRPC DeleteArticle called for ID: %s", req.Id)
+
 	id, err := uuid.Parse(req.Id)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid article ID format")
@@ -175,6 +186,8 @@ func (h *GRPCHandler) DeleteArticle(ctx context.Context, req *newsv1.DeleteArtic
 
 // Source operations
 func (h *GRPCHandler) CreateSource(ctx context.Context, req *newsv1.CreateSourceRequest) (*newsv1.CreateSourceResponse, error) {
+	logrus.Infof("gRPC CreateSource called with name: %s", req.Name)
+
 	if req.Name == "" || req.SourceType == "" {
 		return nil, status.Error(codes.InvalidArgument, "name and source_type are required")
 	}
@@ -202,6 +215,8 @@ func (h *GRPCHandler) CreateSource(ctx context.Context, req *newsv1.CreateSource
 }
 
 func (h *GRPCHandler) GetSource(ctx context.Context, req *newsv1.GetSourceRequest) (*newsv1.GetSourceResponse, error) {
+	logrus.Infof("gRPC GetSource called with ID: %d", req.Id)
+
 	source, err := h.sourceRepo.GetByID(ctx, uint(req.Id))
 	if err != nil {
 		logrus.WithError(err).Error("Failed to get source via gRPC")
@@ -214,6 +229,8 @@ func (h *GRPCHandler) GetSource(ctx context.Context, req *newsv1.GetSourceReques
 }
 
 func (h *GRPCHandler) ListSources(ctx context.Context, req *newsv1.ListSourcesRequest) (*newsv1.ListSourcesResponse, error) {
+	logrus.Infof("gRPC ListSources called with activeOnly: %t", req.ActiveOnly)
+
 	var sources []*model.NewsSource
 	var err error
 
@@ -241,6 +258,8 @@ func (h *GRPCHandler) ListSources(ctx context.Context, req *newsv1.ListSourcesRe
 }
 
 func (h *GRPCHandler) UpdateSource(ctx context.Context, req *newsv1.UpdateSourceRequest) (*newsv1.UpdateSourceResponse, error) {
+	logrus.Infof("gRPC UpdateSource called for ID: %d", req.Id)
+
 	source := &model.NewsSource{
 		ID:                 uint(req.Id),
 		Name:               req.Name,
@@ -261,6 +280,8 @@ func (h *GRPCHandler) UpdateSource(ctx context.Context, req *newsv1.UpdateSource
 }
 
 func (h *GRPCHandler) DeleteSource(ctx context.Context, req *newsv1.DeleteSourceRequest) (*newsv1.DeleteSourceResponse, error) {
+	logrus.Infof("gRPC DeleteSource called for ID: %d", req.Id)
+
 	if err := h.sourceRepo.Delete(ctx, uint(req.Id)); err != nil {
 		logrus.WithError(err).Error("Failed to delete source via gRPC")
 		return nil, status.Error(codes.Internal, "failed to delete source")
@@ -274,6 +295,8 @@ func (h *GRPCHandler) DeleteSource(ctx context.Context, req *newsv1.DeleteSource
 
 // Ingestion operations
 func (h *GRPCHandler) TriggerManualIngestion(ctx context.Context, req *newsv1.TriggerManualIngestionRequest) (*newsv1.TriggerManualIngestionResponse, error) {
+	logrus.Infof("gRPC TriggerManualIngestion called with sourceType: %s", req.SourceType)
+
 	var err error
 	var articlesIngested int32 = 0
 
@@ -283,7 +306,7 @@ func (h *GRPCHandler) TriggerManualIngestion(ctx context.Context, req *newsv1.Tr
 	case "newsapi":
 		err = h.ingestionService.IngestFromNewsAPI(ctx)
 	case "twitter":
-		return nil, status.Error(codes.Unimplemented, "Twitter ingestion not implemented yet")
+		err = h.ingestionService.IngestFromTwitter(ctx)
 	default:
 		return nil, status.Error(codes.InvalidArgument, "invalid source type")
 	}
@@ -302,6 +325,8 @@ func (h *GRPCHandler) TriggerManualIngestion(ctx context.Context, req *newsv1.Tr
 }
 
 func (h *GRPCHandler) GetIngestionStatus(ctx context.Context, req *emptypb.Empty) (*newsv1.GetIngestionStatusResponse, error) {
+	logrus.Info("gRPC GetIngestionStatus called")
+
 	// Get pending articles count
 	pendingArticles, err := h.articleRepo.GetPendingArticles(ctx, 1000)
 	if err != nil {
@@ -340,6 +365,8 @@ func (h *GRPCHandler) GetIngestionStatus(ctx context.Context, req *emptypb.Empty
 }
 
 func (h *GRPCHandler) GetProcessingLogs(ctx context.Context, req *newsv1.GetProcessingLogsRequest) (*newsv1.GetProcessingLogsResponse, error) {
+	logrus.Infof("gRPC GetProcessingLogs called for articleId: %s", req.ArticleId)
+
 	if req.ArticleId == "" {
 		return nil, status.Error(codes.InvalidArgument, "article_id is required")
 	}
@@ -376,6 +403,8 @@ func (h *GRPCHandler) GetProcessingLogs(ctx context.Context, req *newsv1.GetProc
 }
 
 func (h *GRPCHandler) HealthCheck(ctx context.Context, req *emptypb.Empty) (*newsv1.HealthCheckResponse, error) {
+	logrus.Info("gRPC HealthCheck called")
+
 	return &newsv1.HealthCheckResponse{
 		Status:         "healthy",
 		Service:        "news-ingestion",
