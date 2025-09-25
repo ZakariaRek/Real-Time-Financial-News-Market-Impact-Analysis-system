@@ -37,35 +37,19 @@ func main() {
 
 	logrus.Info("Starting News Ingestion Service...")
 
-	// Initialize database connection
-	dbConfig := database.Config{
-		Host:            viper.GetString("database.postgres.host"),
-		Port:            viper.GetInt("database.postgres.port"),
-		Database:        viper.GetString("database.postgres.database"),
-		Username:        viper.GetString("database.postgres.username"),
-		Password:        viper.GetString("database.postgres.password"),
-		SSLMode:         viper.GetString("database.postgres.ssl_mode"),
-		MaxOpenConns:    viper.GetInt("database.postgres.max_open_conns"),
-		MaxIdleConns:    viper.GetInt("database.postgres.max_idle_conns"),
-		ConnMaxLifetime: viper.GetString("database.postgres.conn_max_lifetime"),
-		ConnMaxIdleTime: viper.GetString("database.postgres.conn_max_idle_time"),
-	}
-
-	// Connect to database
-	db, err := database.NewConnection(dbConfig)
+	// Initialize database connection with retries
+	db, err := initDatabase()
 	if err != nil {
-		logrus.Fatalf("Failed to connect to database: %v", err)
+		logrus.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
 
 	logrus.Info("Database connection established successfully")
 
 	// Run database migrations
-	if err := db.AutoMigrate(); err != nil {
+	if err := runMigrations(db); err != nil {
 		logrus.Fatalf("Failed to run migrations: %v", err)
 	}
-
-	logrus.Info("Database migrations completed successfully")
 
 	// Create additional indexes for performance
 	if err := db.CreateIndexes(); err != nil {
@@ -181,6 +165,56 @@ func main() {
 	grpcServer.GracefulStop()
 
 	logrus.Info("All servers exited")
+}
+
+func initDatabase() (*database.Database, error) {
+	dbConfig := database.Config{
+		Host:            viper.GetString("database.postgres.host"),
+		Port:            viper.GetInt("database.postgres.port"),
+		Database:        viper.GetString("database.postgres.database"),
+		Username:        viper.GetString("database.postgres.username"),
+		Password:        viper.GetString("database.postgres.password"),
+		SSLMode:         viper.GetString("database.postgres.ssl_mode"),
+		MaxOpenConns:    viper.GetInt("database.postgres.max_open_conns"),
+		MaxIdleConns:    viper.GetInt("database.postgres.max_idle_conns"),
+		ConnMaxLifetime: viper.GetString("database.postgres.conn_max_lifetime"),
+		ConnMaxIdleTime: viper.GetString("database.postgres.conn_max_idle_time"),
+	}
+
+	var db *database.Database
+	var err error
+
+	// Retry connection up to 5 times
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		db, err = database.NewConnection(dbConfig)
+		if err == nil {
+			break
+		}
+
+		if i < maxRetries-1 {
+			logrus.Warnf("Failed to connect to database (attempt %d/%d): %v", i+1, maxRetries, err)
+			time.Sleep(time.Duration(i+1) * 2 * time.Second) // Exponential backoff
+		}
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
+	}
+
+	return db, nil
+}
+
+func runMigrations(db *database.Database) error {
+	logrus.Info("Running database migrations...")
+
+	// Run migrations with better error handling
+	if err := db.AutoMigrate(); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
+	logrus.Info("Database migrations completed successfully")
+	return nil
 }
 
 func setupHTTPServer(httpHandler *handler.HTTPHandler, port int) *http.Server {
