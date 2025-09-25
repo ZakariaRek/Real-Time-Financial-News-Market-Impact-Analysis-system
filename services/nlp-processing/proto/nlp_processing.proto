@@ -1,0 +1,257 @@
+// services/nlp-processing/proto/nlp_processing.proto
+syntax = "proto3";
+
+package nlp.v1;
+
+option go_package = "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/proto/gen/nlp/v1;nlpv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// NLPProcessingService handles real-time NLP analysis
+service NLPProcessingService {
+  // Article processing
+  rpc StreamArticles(stream Article) returns (stream AnalysisResult);
+  rpc ProcessArticle(ProcessArticleRequest) returns (ProcessArticleResponse);
+  rpc ProcessBatch(BatchProcessRequest) returns (BatchProcessResponse);
+
+  // Analysis retrieval
+  rpc GetAnalysisResult(GetAnalysisRequest) returns (GetAnalysisResponse);
+  rpc GetSentimentTrends(SentimentTrendsRequest) returns (SentimentTrendsResponse);
+  rpc GetEntityMentions(EntityMentionsRequest) returns (EntityMentionsResponse);
+  rpc GetTopicDistribution(TopicDistributionRequest) returns (TopicDistributionResponse);
+
+  // Real-time streams
+  rpc StreamSentimentUpdates(SentimentStreamRequest) returns (stream SentimentUpdate);
+  rpc StreamBreakingNews(BreakingNewsRequest) returns (stream BreakingNewsAlert);
+
+  // Health and status
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
+  rpc GetProcessingStatus(google.protobuf.Empty) returns (ProcessingStatusResponse);
+}
+
+// Core entities
+message Article {
+  string id = 1;
+  string title = 2;
+  string content = 3;
+  string url = 4;
+  repeated string symbols = 5;
+  google.protobuf.Timestamp published_at = 6;
+  uint32 source_id = 7;
+}
+
+message SentimentAnalysis {
+  string article_id = 1;
+  float compound_score = 2;
+  float confidence = 3;
+  string primary_symbol = 4;
+  string model_version = 5;
+  google.protobuf.Timestamp analysis_timestamp = 6;
+}
+
+message EntityRecognition {
+  string article_id = 1;
+  string entity_text = 2;
+  string entity_type = 3;
+  string stock_symbol = 4;
+  float confidence = 5;
+  string entity_category = 6;
+  int32 start_position = 7;
+  int32 end_position = 8;
+}
+
+message TopicClassification {
+  string article_id = 1;
+  string primary_topic = 2;
+  float primary_topic_confidence = 3;
+  repeated string keywords = 4;
+  float urgency_score = 5;
+  bool breaking_news_indicator = 6;
+  repeated TopicScore all_topics = 7;
+}
+
+message TopicScore {
+  string topic = 1;
+  float confidence = 2;
+}
+
+message AnalysisResult {
+  string article_id = 1;
+  SentimentAnalysis sentiment = 2;
+  repeated EntityRecognition entities = 3;
+  TopicClassification topic = 4;
+  int64 processing_time_ms = 5;
+  string status = 6;
+  string error_message = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+// Request/Response messages
+message ProcessArticleRequest {
+  Article article = 1;
+  ProcessingOptions options = 2;
+}
+
+message ProcessArticleResponse {
+  AnalysisResult result = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+message BatchProcessRequest {
+  repeated Article articles = 1;
+  ProcessingOptions options = 2;
+}
+
+message BatchProcessResponse {
+  repeated AnalysisResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+  repeated string errors = 4;
+}
+
+message ProcessingOptions {
+  bool enable_sentiment = 1;
+  bool enable_ner = 2;
+  bool enable_topic = 3;
+  bool enable_keywords = 4;
+  float confidence_threshold = 5;
+  string model_version = 6;
+}
+
+message GetAnalysisRequest {
+  string article_id = 1;
+}
+
+message GetAnalysisResponse {
+  AnalysisResult result = 1;
+  bool found = 2;
+}
+
+message SentimentTrendsRequest {
+  string symbol = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  string interval = 4; // hour, day, week
+  int32 limit = 5;
+}
+
+message SentimentTrendsResponse {
+  repeated SentimentTrend trends = 1;
+  int32 total_count = 2;
+}
+
+message SentimentTrend {
+  google.protobuf.Timestamp timestamp = 1;
+  string symbol = 2;
+  double avg_sentiment = 3;
+  int64 article_count = 4;
+  double volatility = 5;
+}
+
+message EntityMentionsRequest {
+  string entity_text = 1;
+  string entity_type = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+  int32 limit = 5;
+}
+
+message EntityMentionsResponse {
+  repeated EntityMention mentions = 1;
+  int32 total_count = 2;
+}
+
+message EntityMention {
+  string article_id = 1;
+  string entity_text = 2;
+  string entity_type = 3;
+  float confidence = 4;
+  google.protobuf.Timestamp mention_time = 5;
+  string article_title = 6;
+}
+
+message TopicDistributionRequest {
+  google.protobuf.Timestamp start_time = 1;
+  google.protobuf.Timestamp end_time = 2;
+  int32 limit = 3;
+}
+
+message TopicDistributionResponse {
+  repeated TopicDistribution topics = 1;
+}
+
+message TopicDistribution {
+  string topic = 1;
+  int64 article_count = 2;
+  double avg_confidence = 3;
+  double percentage = 4;
+}
+
+// Streaming messages
+message SentimentStreamRequest {
+  repeated string symbols = 1;
+  float threshold = 2;
+}
+
+message SentimentUpdate {
+  string symbol = 1;
+  float current_sentiment = 2;
+  float previous_sentiment = 3;
+  float change = 4;
+  int32 article_count = 5;
+  google.protobuf.Timestamp timestamp = 6;
+}
+
+message BreakingNewsRequest {
+  repeated string topics = 1;
+  float urgency_threshold = 2;
+}
+
+message BreakingNewsAlert {
+  string article_id = 1;
+  string title = 2;
+  string primary_topic = 3;
+  float urgency_score = 4;
+  repeated string entities = 5;
+  float sentiment_score = 6;
+  google.protobuf.Timestamp timestamp = 7;
+}
+
+message HealthCheckResponse {
+  string status = 1;
+  string service = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  string database_status = 4;
+  ModelStatus model_status = 5;
+  map<string, string> details = 6;
+}
+
+message ModelStatus {
+  bool finbert_loaded = 1;
+  bool ner_model_loaded = 2;
+  bool topic_model_loaded = 3;
+  string finbert_version = 4;
+  string ner_version = 5;
+  string topic_version = 6;
+}
+
+message ProcessingStatusResponse {
+  string status = 1;
+  int32 pending_articles = 2;
+  int32 processing_articles = 3;
+  int32 completed_today = 4;
+  int32 failed_today = 5;
+  double avg_processing_time_ms = 6;
+  google.protobuf.Timestamp last_processed = 7;
+  ModelPerformance performance = 8;
+}
+
+message ModelPerformance {
+  double sentiment_accuracy = 1;
+  double ner_precision = 2;
+  double topic_accuracy = 3;
+  int64 total_processed = 4;
+  google.protobuf.Timestamp last_updated = 5;
+}
