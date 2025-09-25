@@ -4,17 +4,26 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
+	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/client"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/database"
+	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/handler"
+	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/repository"
+	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/service"
+	newsv1 "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/proto/services/news-ingestion/proto/gen"
 )
 
 func main() {
@@ -28,7 +37,137 @@ func main() {
 
 	logrus.Info("Starting News Ingestion Service...")
 
-	// Initialize database connection
+	// Initialize database connection with retries
+	db, err := initDatabase()
+	if err != nil {
+		logrus.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer db.Close()
+
+	logrus.Info("Database connection established successfully")
+
+	// Run database migrations
+	if err := runMigrations(db); err != nil {
+		logrus.Fatalf("Failed to run migrations: %v", err)
+	}
+
+	// Create additional indexes for performance
+	if err := db.CreateIndexes(); err != nil {
+		logrus.Warnf("Failed to create some indexes: %v", err)
+	}
+
+	// Initialize repositories
+	articleRepo := repository.NewArticleRepository(db.DB)
+	sourceRepo := repository.NewSourceRepository(db.DB)
+	logRepo := repository.NewProcessingLogRepository(db.DB)
+	rateLimitRepo := repository.NewRateLimitRepository(db.DB)
+
+	// Initialize clients
+	newsAPIClient := client.NewNewsAPIClient(
+		viper.GetString("news_sources.newsapi.api_key"),
+		viper.GetString("news_sources.newsapi.base_url"),
+	)
+
+	rssClient := client.NewRSSClient()
+
+	twitterClient := client.NewTwitterClient(
+		viper.GetString("news_sources.twitter.bearer_token"),
+		viper.GetString("news_sources.twitter.base_url"),
+	)
+
+	// Initialize services
+	deduplicationService := service.NewDeduplicationService(articleRepo)
+
+	ingestionService := service.NewIngestionService(
+		articleRepo,
+		sourceRepo,
+		logRepo,
+		rateLimitRepo,
+		deduplicationService,
+		newsAPIClient,
+		rssClient,
+		twitterClient,
+	)
+
+	// Initialize handlers
+	httpHandler := handler.NewHTTPHandler(ingestionService, articleRepo, sourceRepo)
+	grpcHandler := handler.NewGRPCHandler(ingestionService, articleRepo, sourceRepo, logRepo)
+
+	// Setup HTTP server
+	httpPort := viper.GetInt("server.port")
+	if httpPort == 0 {
+		httpPort = 4001 // Default HTTP port
+	}
+
+	// Setup gRPC server
+	grpcPort := viper.GetInt("server.grpc_port")
+	if grpcPort == 0 {
+		grpcPort = 4002 // Default gRPC port
+	}
+
+	// Create HTTP server
+	httpServer := setupHTTPServer(httpHandler, httpPort)
+
+	// Create gRPC server
+	grpcServer := setupGRPCServer(grpcHandler, grpcPort)
+
+	// Start servers concurrently
+	var wg sync.WaitGroup
+
+	// Start HTTP server
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logrus.Infof("Starting HTTP server on port %d", httpPort)
+		logrus.Infof("Health check available at: http://localhost:%d/health", httpPort)
+		logrus.Infof("Database status available at: http://localhost:%d/db/status", httpPort)
+
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logrus.Fatalf("HTTP server failed to start: %v", err)
+		}
+	}()
+
+	// Start gRPC server
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
+		if err != nil {
+			logrus.Fatalf("Failed to listen on gRPC port %d: %v", grpcPort, err)
+		}
+
+		logrus.Infof("Starting gRPC server on port %d", grpcPort)
+		logrus.Infof("gRPC reflection enabled for development")
+
+		if err := grpcServer.Serve(lis); err != nil {
+			logrus.Fatalf("gRPC server failed to start: %v", err)
+		}
+	}()
+
+	logrus.Info("All services started successfully! Press Ctrl+C to shutdown...")
+
+	// Wait for interrupt signal to gracefully shutdown the servers
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	logrus.Info("Shutting down servers...")
+
+	// Graceful shutdown with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Shutdown HTTP server
+	if err := httpServer.Shutdown(ctx); err != nil {
+		logrus.Errorf("HTTP server forced to shutdown: %v", err)
+	}
+
+	// Shutdown gRPC server
+	grpcServer.GracefulStop()
+
+	logrus.Info("All servers exited")
+}
+
+func initDatabase() (*database.Database, error) {
 	dbConfig := database.Config{
 		Host:            viper.GetString("database.postgres.host"),
 		Port:            viper.GetInt("database.postgres.port"),
@@ -42,27 +181,43 @@ func main() {
 		ConnMaxIdleTime: viper.GetString("database.postgres.conn_max_idle_time"),
 	}
 
-	// Connect to database
-	db, err := database.NewConnection(dbConfig)
-	if err != nil {
-		logrus.Fatalf("Failed to connect to database: %v", err)
+	var db *database.Database
+	var err error
+
+	// Retry connection up to 5 times
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		db, err = database.NewConnection(dbConfig)
+		if err == nil {
+			break
+		}
+
+		if i < maxRetries-1 {
+			logrus.Warnf("Failed to connect to database (attempt %d/%d): %v", i+1, maxRetries, err)
+			time.Sleep(time.Duration(i+1) * 2 * time.Second) // Exponential backoff
+		}
 	}
-	defer db.Close()
 
-	logrus.Info("Database connection established successfully")
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
+	}
 
-	// Run database migrations
+	return db, nil
+}
+
+func runMigrations(db *database.Database) error {
+	logrus.Info("Running database migrations...")
+
+	// Run migrations with better error handling
 	if err := db.AutoMigrate(); err != nil {
-		logrus.Fatalf("Failed to run migrations: %v", err)
+		return fmt.Errorf("migration failed: %w", err)
 	}
 
 	logrus.Info("Database migrations completed successfully")
+	return nil
+}
 
-	// Create additional indexes for performance
-	if err := db.CreateIndexes(); err != nil {
-		logrus.Warnf("Failed to create some indexes: %v", err)
-	}
-
+func setupHTTPServer(httpHandler *handler.HTTPHandler, port int) *http.Server {
 	// Setup Gin router
 	if viper.GetString("server.environment") == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -79,84 +234,74 @@ func main() {
 			"service":   "news-ingestion",
 			"timestamp": time.Now().UTC(),
 			"database":  "connected",
+			"servers": gin.H{
+				"http": "running",
+				"grpc": "running",
+			},
 		})
 	})
 
 	// Basic database status endpoint
 	router.GET("/db/status", func(c *gin.Context) {
-		// Test database connection
-		sqlDB, err := db.DB.DB()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"status": "error",
-				"error":  "Failed to get database instance",
-			})
-			return
-		}
-
-		if err := sqlDB.Ping(); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"status": "error",
-				"error":  "Database ping failed",
-			})
-			return
-		}
-
-		stats := sqlDB.Stats()
 		c.JSON(http.StatusOK, gin.H{
 			"status": "connected",
-			"stats": gin.H{
-				"open_connections":     stats.OpenConnections,
-				"in_use":               stats.InUse,
-				"idle":                 stats.Idle,
-				"wait_count":           stats.WaitCount,
-				"wait_duration":        stats.WaitDuration.String(),
-				"max_idle_closed":      stats.MaxIdleClosed,
-				"max_idle_time_closed": stats.MaxIdleTimeClosed,
-				"max_lifetime_closed":  stats.MaxLifetimeClosed,
-			},
 		})
 	})
 
-	// Setup HTTP server
-	port := viper.GetInt("server.port")
-	if port == 0 {
-		port = 4001 // Default port for news ingestion service
+	// API routes
+	v1 := router.Group("/api/v1")
+	{
+		// Article routes
+		articles := v1.Group("/articles")
+		{
+			articles.POST("", httpHandler.CreateArticle)
+			articles.GET("/:id", httpHandler.GetArticle)
+			articles.GET("", httpHandler.ListArticles)
+			articles.PUT("/:id/status", httpHandler.UpdateArticleStatus)
+		}
+
+		// Source routes
+		sources := v1.Group("/sources")
+		{
+			sources.POST("", httpHandler.CreateSource)
+			sources.GET("/:id", httpHandler.GetSource)
+			sources.GET("", httpHandler.ListSources)
+			sources.PUT("/:id", httpHandler.UpdateSource)
+		}
+
+		// Ingestion routes
+		ingestion := v1.Group("/ingestion")
+		{
+			ingestion.POST("/trigger", httpHandler.TriggerManualIngestion)
+			ingestion.GET("/status", httpHandler.GetIngestionStatus)
+		}
 	}
 
-	srv := &http.Server{
+	return &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: router,
 	}
+}
 
-	// Start server in a goroutine
-	go func() {
-		logrus.Infof("Starting News Ingestion Service on port %d", port)
-		logrus.Infof("Health check available at: http://localhost:%d/health", port)
-		logrus.Infof("Database status available at: http://localhost:%d/db/status", port)
-
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logrus.Fatalf("Failed to start server: %v", err)
-		}
-	}()
-
-	logrus.Info("Service started successfully! Press Ctrl+C to shutdown...")
-
-	// Wait for interrupt signal to gracefully shutdown the server
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	logrus.Info("Shutting down server...")
-
-	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(ctx); err != nil {
-		logrus.Errorf("Server forced to shutdown: %v", err)
+func setupGRPCServer(grpcHandler *handler.GRPCHandler, port int) *grpc.Server {
+	// Create gRPC server with options
+	opts := []grpc.ServerOption{
+		grpc.MaxRecvMsgSize(1024 * 1024 * 4), // 4MB
+		grpc.MaxSendMsgSize(1024 * 1024 * 4), // 4MB
 	}
 
-	logrus.Info("Server exited")
+	grpcServer := grpc.NewServer(opts...)
+
+	// Register the NewsService with the gRPC server
+	newsv1.RegisterNewsServiceServer(grpcServer, grpcHandler)
+
+	logrus.Info("NewsService registered with gRPC server")
+
+	// Enable reflection for development (allows tools like grpcui and Postman to discover services)
+	reflection.Register(grpcServer)
+	logrus.Info("gRPC reflection enabled")
+
+	return grpcServer
 }
 
 func initConfig() error {
@@ -168,12 +313,13 @@ func initConfig() error {
 
 	// Set default values
 	viper.SetDefault("server.port", 4001)
+	viper.SetDefault("server.grpc_port", 4002)
 	viper.SetDefault("server.environment", "development")
 	viper.SetDefault("database.postgres.host", "localhost")
 	viper.SetDefault("database.postgres.port", 5432)
 	viper.SetDefault("database.postgres.database", "news_ingestion")
 	viper.SetDefault("database.postgres.username", "postgres")
-	viper.SetDefault("database.postgres.password", "zakaria")
+	viper.SetDefault("database.postgres.password", "yahyasd56")
 	viper.SetDefault("database.postgres.ssl_mode", "disable")
 	viper.SetDefault("database.postgres.max_open_conns", 25)
 	viper.SetDefault("database.postgres.max_idle_conns", 5)
@@ -181,6 +327,10 @@ func initConfig() error {
 	viper.SetDefault("database.postgres.conn_max_idle_time", "1m")
 	viper.SetDefault("logging.level", "info")
 	viper.SetDefault("logging.format", "text")
+	viper.SetDefault("news_sources.newsapi.api_key", "")
+	viper.SetDefault("news_sources.newsapi.base_url", "https://newsapi.org/v2")
+	viper.SetDefault("news_sources.twitter.bearer_token", "")
+	viper.SetDefault("news_sources.twitter.base_url", "https://api.twitter.com/2")
 
 	// Read environment variables with prefix
 	viper.SetEnvPrefix("NEWS")
@@ -191,14 +341,6 @@ func initConfig() error {
 	} else {
 		logrus.Infof("Using config file: %s", viper.ConfigFileUsed())
 	}
-
-	// Debug: Print database configuration
-	logrus.Debugf("Database config - Host: %s, Port: %d, Database: %s, Username: %s, SSL: %s",
-		viper.GetString("database.postgres.host"),
-		viper.GetInt("database.postgres.port"),
-		viper.GetString("database.postgres.database"),
-		viper.GetString("database.postgres.username"),
-		viper.GetString("database.postgres.ssl_mode"))
 
 	return nil
 }

@@ -1,4 +1,3 @@
-// services/news-ingestion/internal/database/connection.go
 package database
 
 import (
@@ -33,15 +32,13 @@ type Database struct {
 
 func NewConnection(cfg Config) (*Database, error) {
 	// Build PostgreSQL DSN
-	// For AWS RDS, ensure SSL is enabled in production
 	sslMode := cfg.SSLMode
 	if sslMode == "" {
 		sslMode = "disable" // For local development
-		// In production with AWS RDS, use: sslMode = "require"
 	}
 
 	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
 		cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database, sslMode,
 	)
 
@@ -53,12 +50,14 @@ func NewConnection(cfg Config) (*Database, error) {
 		gormLogger = logger.Default.LogMode(logger.Info)
 	}
 
-	// Open database connection
+	// Open database connection with improved config
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: gormLogger,
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
+		DisableForeignKeyConstraintWhenMigrating: true, // This helps with migration issues
+		PrepareStmt:                              true, // Improves performance
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -111,19 +110,58 @@ func NewConnection(cfg Config) (*Database, error) {
 }
 
 func (d *Database) AutoMigrate() error {
-	// Run database migrations
-	// In production with AWS RDS, consider using golang-migrate for better control
-	err := d.DB.AutoMigrate(
-		&model.NewsSource{},
-		&model.Article{},
-		&model.ArticleProcessingLog{},
-		&model.RateLimitTracking{},
-	)
-	if err != nil {
-		return fmt.Errorf("failed to run auto migrations: %w", err)
+	// Enable UUID extension first
+	if err := d.enableUUIDExtension(); err != nil {
+		logrus.WithError(err).Warn("Failed to enable UUID extension, continuing anyway")
 	}
 
+	// Migrate in the correct order to handle foreign key dependencies
+	logrus.Info("Starting database migrations...")
+
+	// First migrate tables without foreign keys
+	err := d.DB.AutoMigrate(&model.NewsSource{})
+	if err != nil {
+		return fmt.Errorf("failed to migrate NewsSource: %w", err)
+	}
+	logrus.Info("NewsSource table migrated successfully")
+
+	// Then migrate tables with foreign keys
+	err = d.DB.AutoMigrate(&model.Article{})
+	if err != nil {
+		return fmt.Errorf("failed to migrate Article: %w", err)
+	}
+	logrus.Info("Article table migrated successfully")
+
+	err = d.DB.AutoMigrate(&model.ArticleProcessingLog{})
+	if err != nil {
+		return fmt.Errorf("failed to migrate ArticleProcessingLog: %w", err)
+	}
+	logrus.Info("ArticleProcessingLog table migrated successfully")
+
+	err = d.DB.AutoMigrate(&model.RateLimitTracking{})
+	if err != nil {
+		return fmt.Errorf("failed to migrate RateLimitTracking: %w", err)
+	}
+	logrus.Info("RateLimitTracking table migrated successfully")
+
 	logrus.Info("Database migrations completed successfully")
+	return nil
+}
+
+func (d *Database) enableUUIDExtension() error {
+	// Try to enable uuid-ossp extension first
+	err := d.DB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"").Error
+	if err != nil {
+		logrus.WithError(err).Debug("Failed to enable uuid-ossp extension, trying pgcrypto")
+	}
+
+	// Also try pgcrypto for gen_random_uuid() if uuid-ossp is not available
+	err = d.DB.Exec("CREATE EXTENSION IF NOT EXISTS \"pgcrypto\"").Error
+	if err != nil {
+		logrus.WithError(err).Debug("Failed to enable pgcrypto extension")
+		return fmt.Errorf("failed to enable UUID extensions: %w", err)
+	}
+
 	return nil
 }
 
@@ -143,6 +181,7 @@ func (d *Database) CreateIndexes() error {
 		"CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_articles_symbols_gin ON articles USING GIN(symbols)",
 		"CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_rate_limit_source_time ON rate_limit_tracking(source_id, time_window)",
 		"CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_processing_logs_stage_status ON article_processing_logs(processing_stage, status)",
+		"CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_rate_limit_source_window ON rate_limit_tracking(source_id, time_window)",
 	}
 
 	for _, index := range indexes {

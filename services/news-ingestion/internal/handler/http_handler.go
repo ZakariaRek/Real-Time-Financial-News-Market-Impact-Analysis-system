@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
+	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/model"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/repository"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/internal/service"
 )
@@ -256,11 +257,20 @@ func (h *HTTPHandler) TriggerManualIngestion(c *gin.Context) {
 	var err error
 	switch req.SourceType {
 	case "rss":
-		err = h.ingestionService.IngestFromRSS(c.Request.Context())
+		if h.ingestionService != nil {
+			err = h.ingestionService.IngestFromRSS(c.Request.Context())
+		} else {
+			c.JSON(http.StatusNotImplemented, gin.H{"error": "Ingestion service not implemented yet"})
+			return
+		}
 	case "newsapi":
-		err = h.ingestionService.IngestFromNewsAPI(c.Request.Context())
+		if h.ingestionService != nil {
+			err = h.ingestionService.IngestFromNewsAPI(c.Request.Context())
+		} else {
+			c.JSON(http.StatusNotImplemented, gin.H{"error": "Ingestion service not implemented yet"})
+			return
+		}
 	case "twitter":
-		// err = h.ingestionService.IngestFromTwitter(c.Request.Context())
 		c.JSON(http.StatusNotImplemented, gin.H{"error": "Twitter ingestion not implemented yet"})
 		return
 	default:
