@@ -42,7 +42,7 @@ func NewConnection(cfg Config) (*Database, error) {
 	}
 
 	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
 		cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.Database, sslMode,
 	)
 
@@ -60,6 +60,8 @@ func NewConnection(cfg Config) (*Database, error) {
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
+		DisableForeignKeyConstraintWhenMigrating: true, // This helps with migration issues
+		PrepareStmt:                              true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -120,6 +122,30 @@ func (d *Database) AutoMigrate() error {
 		&model.TopicClassification{},
 		&model.SentimentHourlyMV{},
 	)
+	// Migrate in the correct order to handle foreign key dependencies
+	logrus.Info("Starting database migrations...")
+
+	// First migrate tables without foreign keys
+	err = d.DB.AutoMigrate(&model.NewsSource{})
+	if err != nil {
+		return fmt.Errorf("failed to migrate NewsSource: %w", err)
+	}
+	logrus.Info("NewsSource table migrated successfully")
+
+	// Then migrate tables with foreign keys
+	err = d.DB.AutoMigrate(&model.Article{})
+	if err != nil {
+		return fmt.Errorf("failed to migrate Article: %w", err)
+	}
+	logrus.Info("Article table migrated successfully")
+
+	err = d.DB.AutoMigrate(&model.ArticleProcessingLog{})
+	if err != nil {
+		return fmt.Errorf("failed to migrate ArticleProcessingLog: %w", err)
+	}
+	logrus.Info("ArticleProcessingLog table migrated successfully")
+
+	//err = d.DB.AutoMigrate(&model.RateLimitTracking{})
 	if err != nil {
 		return fmt.Errorf("failed to run auto migrations: %w", err)
 	}

@@ -430,10 +430,10 @@ func (s *nlpProcessingService) reconstructAnalysisResult(ctx context.Context, ar
 	}
 
 	// Get entity recognition
-	entities, err := s.analysisRepo.GetEntitiesByArticleID(ctx, articleID)
-	if err == nil {
-		result.EntityRecognition = entities
-	}
+	//entities, err := s.analysisRepo.GetEntitiesByArticleID(ctx, articleID)
+	//if err == nil {
+	//	result.EntityRecognition = entities
+	//}
 
 	// Get topic classification
 	topic, err := s.analysisRepo.GetTopicByArticleID(ctx, articleID)

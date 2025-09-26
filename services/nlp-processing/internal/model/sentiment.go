@@ -26,6 +26,7 @@ type AnalysisResult struct {
 	ProcessingTimeMs    int64                `json:"processing_time_ms"`
 	Status              string               `json:"status"`
 	ErrorMessage        string               `json:"error_message,omitempty"`
+	CreatedAt           time.Time            `json:"created_at"` // Added missing CreatedAt field
 }
 
 // Request/Response models for API
