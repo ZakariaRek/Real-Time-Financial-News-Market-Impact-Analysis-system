@@ -12,6 +12,10 @@ import (
 	"syscall"
 	"time"
 
+	//newsv1 "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/proto/services/news-ingestion/proto/gen"
+	newsv1 "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/proto/gen/news/v1"
+	nlpv1 "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/proto/gen/nlp/v1"
+
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
@@ -355,9 +359,9 @@ func setupGRPCServer(grpcHandler *handler.GRPCHandler, nlpHandler *handler.NLPGR
 
 	grpcServer := grpc.NewServer(opts...)
 
-	// Register services
-	// Note: In a complete implementation, you would register the actual proto-generated services
-	// For now, we'll use placeholder registrations
+	// Register services with the generated proto registration functions
+	newsv1.RegisterNewsServiceServer(grpcServer, grpcHandler)
+	nlpv1.RegisterNLPProcessingServiceServer(grpcServer, nlpHandler)
 
 	// Enable reflection for development
 	if viper.GetString("server.environment") != "production" {
@@ -367,7 +371,6 @@ func setupGRPCServer(grpcHandler *handler.GRPCHandler, nlpHandler *handler.NLPGR
 
 	return grpcServer
 }
-
 func initConfig() error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
