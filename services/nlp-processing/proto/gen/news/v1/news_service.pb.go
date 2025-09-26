@@ -6,7 +6,7 @@
 // 	protoc        (unknown)
 // source: news_service.proto
 
-package newsv1
+package v1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
