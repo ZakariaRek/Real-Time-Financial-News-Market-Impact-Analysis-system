@@ -1,0 +1,228 @@
+// services/nlp-processing/proto/news_service.proto
+syntax = "proto3";
+
+package news.v1;
+
+option go_package = "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/proto/gen/news/v1;newsv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// NewsService handles news ingestion and management
+service NewsService {
+  // Article operations
+  rpc CreateArticle(CreateArticleRequest) returns (CreateArticleResponse);
+  rpc GetArticle(GetArticleRequest) returns (GetArticleResponse);
+  rpc ListArticles(ListArticlesRequest) returns (ListArticlesResponse);
+  rpc UpdateArticleStatus(UpdateArticleStatusRequest) returns (UpdateArticleStatusResponse);
+  rpc DeleteArticle(DeleteArticleRequest) returns (DeleteArticleResponse);
+
+  // Source operations
+  rpc CreateSource(CreateSourceRequest) returns (CreateSourceResponse);
+  rpc GetSource(GetSourceRequest) returns (GetSourceResponse);
+  rpc ListSources(ListSourcesRequest) returns (ListSourcesResponse);
+  rpc UpdateSource(UpdateSourceRequest) returns (UpdateSourceResponse);
+  rpc DeleteSource(DeleteSourceRequest) returns (DeleteSourceResponse);
+
+  // Ingestion operations
+  rpc TriggerManualIngestion(TriggerManualIngestionRequest) returns (TriggerManualIngestionResponse);
+  rpc GetIngestionStatus(google.protobuf.Empty) returns (GetIngestionStatusResponse);
+  rpc GetProcessingLogs(GetProcessingLogsRequest) returns (GetProcessingLogsResponse);
+
+  // Health check
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
+}
+
+// Core entities
+message Article {
+  string id = 1;
+  uint32 source_id = 2;
+  string title = 3;
+  string content = 4;
+  string url = 5;
+  repeated string symbols = 6;
+  google.protobuf.Timestamp published_at = 7;
+  string processing_status = 8;
+  double relevance_score = 9;
+  string content_hash = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  NewsSource source = 13;
+}
+
+message NewsSource {
+  uint32 id = 1;
+  string name = 2;
+  string source_type = 3;
+  string base_url = 4;
+  int32 rate_limit_per_minute = 5;
+  string status = 6;
+  double success_rate = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+// Article requests/responses
+message CreateArticleRequest {
+  uint32 source_id = 1;
+  string title = 2;
+  string content = 3;
+  string url = 4;
+  repeated string symbols = 5;
+  google.protobuf.Timestamp published_at = 6;
+}
+
+message CreateArticleResponse {
+  Article article = 1;
+}
+
+message GetArticleRequest {
+  string id = 1;
+}
+
+message GetArticleResponse {
+  Article article = 1;
+}
+
+message ListArticlesRequest {
+  int32 limit = 1;
+  repeated string symbols = 2;
+  google.protobuf.Timestamp start_date = 3;
+  google.protobuf.Timestamp end_date = 4;
+  string status = 5;
+}
+
+message ListArticlesResponse {
+  repeated Article articles = 1;
+  int32 total_count = 2;
+}
+
+message UpdateArticleStatusRequest {
+  string id = 1;
+  string status = 2;
+}
+
+message UpdateArticleStatusResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteArticleRequest {
+  string id = 1;
+}
+
+message DeleteArticleResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Source requests/responses
+message CreateSourceRequest {
+  string name = 1;
+  string source_type = 2;
+  string base_url = 3;
+  int32 rate_limit_per_minute = 4;
+  string status = 5;
+}
+
+message CreateSourceResponse {
+  NewsSource source = 1;
+}
+
+message GetSourceRequest {
+  uint32 id = 1;
+}
+
+message GetSourceResponse {
+  NewsSource source = 1;
+}
+
+message ListSourcesRequest {
+  bool active_only = 1;
+}
+
+message ListSourcesResponse {
+  repeated NewsSource sources = 1;
+  int32 total_count = 2;
+}
+
+message UpdateSourceRequest {
+  uint32 id = 1;
+  string name = 2;
+  string source_type = 3;
+  string base_url = 4;
+  int32 rate_limit_per_minute = 5;
+  string status = 6;
+}
+
+message UpdateSourceResponse {
+  NewsSource source = 1;
+}
+
+message DeleteSourceRequest {
+  uint32 id = 1;
+}
+
+message DeleteSourceResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Ingestion requests/responses
+message TriggerManualIngestionRequest {
+  string source_type = 1;
+}
+
+message TriggerManualIngestionResponse {
+  bool success = 1;
+  string message = 2;
+  int32 articles_ingested = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message GetIngestionStatusResponse {
+  string status = 1;
+  int32 pending_articles = 2;
+  int32 processing_articles = 3;
+  int32 failed_articles = 4;
+  google.protobuf.Timestamp last_ingestion = 5;
+  repeated SourceStatus source_statuses = 6;
+}
+
+message SourceStatus {
+  uint32 source_id = 1;
+  string source_name = 2;
+  string status = 3;
+  google.protobuf.Timestamp last_fetch = 4;
+  double success_rate = 5;
+  int32 articles_today = 6;
+}
+
+// Processing logs
+message GetProcessingLogsRequest {
+  string article_id = 1;
+}
+
+message GetProcessingLogsResponse {
+  repeated ProcessingLog logs = 1;
+  int32 total_count = 2;
+}
+
+message ProcessingLog {
+  uint32 id = 1;
+  string article_id = 2;
+  string processing_stage = 3;
+  string status = 4;
+  int32 processing_time_ms = 5;
+  string error_message = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+// Health check
+message HealthCheckResponse {
+  string status = 1;
+  string service = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  string database_status = 4;
+  map<string, string> details = 5;
+}
