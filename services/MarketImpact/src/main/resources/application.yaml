@@ -118,7 +118,29 @@ server:
   http2:
     enabled: true
 
+external:
+  services:
+    nlp-processing:
+      host: localhost
+      port: 50052
+      timeout: 30s
 
+    news-ingestion:
+      host: localhost
+      port: 4002
+      timeout: 30s
+
+# Market Impact Configuration
+market-impact:
+  prediction:
+    confidence-threshold: 0.7
+    batch-size: 100
+    sentiment-weight: 0.6
+    trend-weight: 0.4
+
+  models:
+    version: "1.0"
+    type: "SENTIMENT_BASED"
 
 logging:
   level:
