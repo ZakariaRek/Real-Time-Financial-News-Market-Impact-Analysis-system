@@ -17,228 +17,12 @@ import (
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/model"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/repository"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/service"
+	newsv1 "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/proto/gen/news/v1"
 )
-
-// Placeholder proto types - In production, these would be generated from .proto files
-// Once you generate the proto files, replace these with the actual generated types
-
-// Service interface
-type NewsServiceServer interface {
-	CreateArticle(context.Context, *CreateArticleRequest) (*CreateArticleResponse, error)
-	GetArticle(context.Context, *GetArticleRequest) (*GetArticleResponse, error)
-	ListArticles(context.Context, *ListArticlesRequest) (*ListArticlesResponse, error)
-	UpdateArticleStatus(context.Context, *UpdateArticleStatusRequest) (*UpdateArticleStatusResponse, error)
-	DeleteArticle(context.Context, *DeleteArticleRequest) (*DeleteArticleResponse, error)
-	CreateSource(context.Context, *CreateSourceRequest) (*CreateSourceResponse, error)
-	GetSource(context.Context, *GetSourceRequest) (*GetSourceResponse, error)
-	ListSources(context.Context, *ListSourcesRequest) (*ListSourcesResponse, error)
-	UpdateSource(context.Context, *UpdateSourceRequest) (*UpdateSourceResponse, error)
-	DeleteSource(context.Context, *DeleteSourceRequest) (*DeleteSourceResponse, error)
-	TriggerManualIngestion(context.Context, *TriggerManualIngestionRequest) (*TriggerManualIngestionResponse, error)
-	GetIngestionStatus(context.Context, *emptypb.Empty) (*GetIngestionStatusResponse, error)
-	GetProcessingLogs(context.Context, *GetProcessingLogsRequest) (*GetProcessingLogsResponse, error)
-	HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error)
-}
-
-type UnimplementedNewsServiceServer struct{}
-
-// Article-related proto messages
-type Article struct {
-	Id               string
-	SourceId         uint32
-	Title            string
-	Content          string
-	Url              string
-	Symbols          []string
-	PublishedAt      *timestamppb.Timestamp
-	ProcessingStatus string
-	RelevanceScore   float64
-	ContentHash      string
-	CreatedAt        *timestamppb.Timestamp
-	UpdatedAt        *timestamppb.Timestamp
-	Source           *NewsSource
-}
-
-type CreateArticleRequest struct {
-	SourceId    uint32
-	Title       string
-	Content     string
-	Url         string
-	Symbols     []string
-	PublishedAt *timestamppb.Timestamp
-}
-
-type CreateArticleResponse struct {
-	Article *Article
-}
-
-type GetArticleRequest struct {
-	Id string
-}
-
-type GetArticleResponse struct {
-	Article *Article
-}
-
-type ListArticlesRequest struct {
-	Limit     int32
-	Symbols   []string
-	StartDate *timestamppb.Timestamp
-	EndDate   *timestamppb.Timestamp
-	Status    string
-}
-
-type ListArticlesResponse struct {
-	Articles   []*Article
-	TotalCount int32
-}
-
-type UpdateArticleStatusRequest struct {
-	Id     string
-	Status string
-}
-
-type UpdateArticleStatusResponse struct {
-	Success bool
-	Message string
-}
-
-type DeleteArticleRequest struct {
-	Id string
-}
-
-type DeleteArticleResponse struct {
-	Success bool
-	Message string
-}
-
-// Source-related proto messages
-type NewsSource struct {
-	Id                 uint32
-	Name               string
-	SourceType         string
-	BaseUrl            string
-	RateLimitPerMinute int32
-	Status             string
-	SuccessRate        float64
-	CreatedAt          *timestamppb.Timestamp
-	UpdatedAt          *timestamppb.Timestamp
-}
-
-type CreateSourceRequest struct {
-	Name               string
-	SourceType         string
-	BaseUrl            string
-	RateLimitPerMinute int32
-	Status             string
-}
-
-type CreateSourceResponse struct {
-	Source *NewsSource
-}
-
-type GetSourceRequest struct {
-	Id uint32
-}
-
-type GetSourceResponse struct {
-	Source *NewsSource
-}
-
-type ListSourcesRequest struct {
-	ActiveOnly bool
-}
-
-type ListSourcesResponse struct {
-	Sources    []*NewsSource
-	TotalCount int32
-}
-
-type UpdateSourceRequest struct {
-	Id                 uint32
-	Name               string
-	SourceType         string
-	BaseUrl            string
-	RateLimitPerMinute int32
-	Status             string
-}
-
-type UpdateSourceResponse struct {
-	Source *NewsSource
-}
-
-type DeleteSourceRequest struct {
-	Id uint32
-}
-
-type DeleteSourceResponse struct {
-	Success bool
-	Message string
-}
-
-// Ingestion-related proto messages
-type TriggerManualIngestionRequest struct {
-	SourceType string
-}
-
-type TriggerManualIngestionResponse struct {
-	Success          bool
-	Message          string
-	ArticlesIngested int32
-	Timestamp        *timestamppb.Timestamp
-}
-
-type GetIngestionStatusResponse struct {
-	Status             string
-	PendingArticles    int32
-	ProcessingArticles int32
-	FailedArticles     int32
-	LastIngestion      *timestamppb.Timestamp
-	SourceStatuses     []*SourceStatus
-}
-
-type SourceStatus struct {
-	SourceId      uint32
-	SourceName    string
-	Status        string
-	LastFetch     *timestamppb.Timestamp
-	SuccessRate   float64
-	ArticlesToday int32
-}
-
-// Processing logs
-type GetProcessingLogsRequest struct {
-	ArticleId string
-}
-
-type GetProcessingLogsResponse struct {
-	Logs       []*ProcessingLog
-	TotalCount int32
-}
-
-type ProcessingLog struct {
-	Id               uint32
-	ArticleId        string
-	ProcessingStage  string
-	Status           string
-	ProcessingTimeMs int32
-	ErrorMessage     string
-	CreatedAt        *timestamppb.Timestamp
-}
-
-// Health check
-type HealthCheckResponse struct {
-	Status         string
-	Service        string
-	Timestamp      *timestamppb.Timestamp
-	DatabaseStatus string
-	Details        map[string]string
-	ModelStatus    *ModelStatus
-}
 
 // GRPCHandler implementation
 type GRPCHandler struct {
-	UnimplementedNewsServiceServer
+	newsv1.UnimplementedNewsServiceServer
 	ingestionService service.IngestionService
 	articleRepo      repository.ArticleRepository
 	sourceRepo       repository.SourceRepository
@@ -260,7 +44,7 @@ func NewGRPCHandler(
 }
 
 // Article operations
-func (h *GRPCHandler) CreateArticle(ctx context.Context, req *CreateArticleRequest) (*CreateArticleResponse, error) {
+func (h *GRPCHandler) CreateArticle(ctx context.Context, req *newsv1.CreateArticleRequest) (*newsv1.CreateArticleResponse, error) {
 	// Validate request
 	if req.Title == "" || req.Url == "" {
 		return nil, status.Error(codes.InvalidArgument, "title and url are required")
@@ -292,12 +76,12 @@ func (h *GRPCHandler) CreateArticle(ctx context.Context, req *CreateArticleReque
 		return nil, status.Error(codes.Internal, "failed to create article")
 	}
 
-	return &CreateArticleResponse{
+	return &newsv1.CreateArticleResponse{
 		Article: h.modelToProtoArticle(article),
 	}, nil
 }
 
-func (h *GRPCHandler) GetArticle(ctx context.Context, req *GetArticleRequest) (*GetArticleResponse, error) {
+func (h *GRPCHandler) GetArticle(ctx context.Context, req *newsv1.GetArticleRequest) (*newsv1.GetArticleResponse, error) {
 	id, err := uuid.Parse(req.Id)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid article ID format")
@@ -309,12 +93,12 @@ func (h *GRPCHandler) GetArticle(ctx context.Context, req *GetArticleRequest) (*
 		return nil, status.Error(codes.NotFound, "article not found")
 	}
 
-	return &GetArticleResponse{
+	return &newsv1.GetArticleResponse{
 		Article: h.modelToProtoArticle(article),
 	}, nil
 }
 
-func (h *GRPCHandler) ListArticles(ctx context.Context, req *ListArticlesRequest) (*ListArticlesResponse, error) {
+func (h *GRPCHandler) ListArticles(ctx context.Context, req *newsv1.ListArticlesRequest) (*newsv1.ListArticlesResponse, error) {
 	limit := int(req.Limit)
 	if limit <= 0 || limit > 100 {
 		limit = 50
@@ -345,18 +129,18 @@ func (h *GRPCHandler) ListArticles(ctx context.Context, req *ListArticlesRequest
 	}
 
 	// Convert to proto
-	protoArticles := make([]*Article, len(articles))
+	protoArticles := make([]*newsv1.Article, len(articles))
 	for i, article := range articles {
 		protoArticles[i] = h.modelToProtoArticle(article)
 	}
 
-	return &ListArticlesResponse{
+	return &newsv1.ListArticlesResponse{
 		Articles:   protoArticles,
 		TotalCount: int32(len(articles)),
 	}, nil
 }
 
-func (h *GRPCHandler) UpdateArticleStatus(ctx context.Context, req *UpdateArticleStatusRequest) (*UpdateArticleStatusResponse, error) {
+func (h *GRPCHandler) UpdateArticleStatus(ctx context.Context, req *newsv1.UpdateArticleStatusRequest) (*newsv1.UpdateArticleStatusResponse, error) {
 	id, err := uuid.Parse(req.Id)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid article ID format")
@@ -368,13 +152,13 @@ func (h *GRPCHandler) UpdateArticleStatus(ctx context.Context, req *UpdateArticl
 		return nil, status.Error(codes.Internal, "failed to update article status")
 	}
 
-	return &UpdateArticleStatusResponse{
+	return &newsv1.UpdateArticleStatusResponse{
 		Success: true,
 		Message: "Status updated successfully",
 	}, nil
 }
 
-func (h *GRPCHandler) DeleteArticle(ctx context.Context, req *DeleteArticleRequest) (*DeleteArticleResponse, error) {
+func (h *GRPCHandler) DeleteArticle(ctx context.Context, req *newsv1.DeleteArticleRequest) (*newsv1.DeleteArticleResponse, error) {
 	id, err := uuid.Parse(req.Id)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid article ID format")
@@ -385,14 +169,14 @@ func (h *GRPCHandler) DeleteArticle(ctx context.Context, req *DeleteArticleReque
 		return nil, status.Error(codes.Internal, "failed to delete article")
 	}
 
-	return &DeleteArticleResponse{
+	return &newsv1.DeleteArticleResponse{
 		Success: true,
 		Message: "Article deleted successfully",
 	}, nil
 }
 
 // Source operations
-func (h *GRPCHandler) CreateSource(ctx context.Context, req *CreateSourceRequest) (*CreateSourceResponse, error) {
+func (h *GRPCHandler) CreateSource(ctx context.Context, req *newsv1.CreateSourceRequest) (*newsv1.CreateSourceResponse, error) {
 	if req.Name == "" || req.SourceType == "" {
 		return nil, status.Error(codes.InvalidArgument, "name and source_type are required")
 	}
@@ -414,24 +198,24 @@ func (h *GRPCHandler) CreateSource(ctx context.Context, req *CreateSourceRequest
 		return nil, status.Error(codes.Internal, "failed to create source")
 	}
 
-	return &CreateSourceResponse{
+	return &newsv1.CreateSourceResponse{
 		Source: h.modelToProtoSource(source),
 	}, nil
 }
 
-func (h *GRPCHandler) GetSource(ctx context.Context, req *GetSourceRequest) (*GetSourceResponse, error) {
+func (h *GRPCHandler) GetSource(ctx context.Context, req *newsv1.GetSourceRequest) (*newsv1.GetSourceResponse, error) {
 	source, err := h.sourceRepo.GetByID(ctx, uint(req.Id))
 	if err != nil {
 		logrus.WithError(err).Error("Failed to get source via gRPC")
 		return nil, status.Error(codes.NotFound, "source not found")
 	}
 
-	return &GetSourceResponse{
+	return &newsv1.GetSourceResponse{
 		Source: h.modelToProtoSource(source),
 	}, nil
 }
 
-func (h *GRPCHandler) ListSources(ctx context.Context, req *ListSourcesRequest) (*ListSourcesResponse, error) {
+func (h *GRPCHandler) ListSources(ctx context.Context, req *newsv1.ListSourcesRequest) (*newsv1.ListSourcesResponse, error) {
 	var sources []*model.NewsSource
 	var err error
 
@@ -447,18 +231,18 @@ func (h *GRPCHandler) ListSources(ctx context.Context, req *ListSourcesRequest) 
 	}
 
 	// Convert to proto
-	protoSources := make([]*NewsSource, len(sources))
+	protoSources := make([]*newsv1.NewsSource, len(sources))
 	for i, source := range sources {
 		protoSources[i] = h.modelToProtoSource(source)
 	}
 
-	return &ListSourcesResponse{
+	return &newsv1.ListSourcesResponse{
 		Sources:    protoSources,
 		TotalCount: int32(len(sources)),
 	}, nil
 }
 
-func (h *GRPCHandler) UpdateSource(ctx context.Context, req *UpdateSourceRequest) (*UpdateSourceResponse, error) {
+func (h *GRPCHandler) UpdateSource(ctx context.Context, req *newsv1.UpdateSourceRequest) (*newsv1.UpdateSourceResponse, error) {
 	source := &model.NewsSource{
 		ID:                 uint(req.Id),
 		Name:               req.Name,
@@ -473,25 +257,25 @@ func (h *GRPCHandler) UpdateSource(ctx context.Context, req *UpdateSourceRequest
 		return nil, status.Error(codes.Internal, "failed to update source")
 	}
 
-	return &UpdateSourceResponse{
+	return &newsv1.UpdateSourceResponse{
 		Source: h.modelToProtoSource(source),
 	}, nil
 }
 
-func (h *GRPCHandler) DeleteSource(ctx context.Context, req *DeleteSourceRequest) (*DeleteSourceResponse, error) {
+func (h *GRPCHandler) DeleteSource(ctx context.Context, req *newsv1.DeleteSourceRequest) (*newsv1.DeleteSourceResponse, error) {
 	if err := h.sourceRepo.Delete(ctx, uint(req.Id)); err != nil {
 		logrus.WithError(err).Error("Failed to delete source via gRPC")
 		return nil, status.Error(codes.Internal, "failed to delete source")
 	}
 
-	return &DeleteSourceResponse{
+	return &newsv1.DeleteSourceResponse{
 		Success: true,
 		Message: "Source deleted successfully",
 	}, nil
 }
 
 // Ingestion operations
-func (h *GRPCHandler) TriggerManualIngestion(ctx context.Context, req *TriggerManualIngestionRequest) (*TriggerManualIngestionResponse, error) {
+func (h *GRPCHandler) TriggerManualIngestion(ctx context.Context, req *newsv1.TriggerManualIngestionRequest) (*newsv1.TriggerManualIngestionResponse, error) {
 	var err error
 	var articlesIngested int32 = 0
 
@@ -511,7 +295,7 @@ func (h *GRPCHandler) TriggerManualIngestion(ctx context.Context, req *TriggerMa
 		return nil, status.Error(codes.Internal, "ingestion failed")
 	}
 
-	return &TriggerManualIngestionResponse{
+	return &newsv1.TriggerManualIngestionResponse{
 		Success:          true,
 		Message:          "Ingestion completed successfully",
 		ArticlesIngested: articlesIngested,
@@ -519,7 +303,7 @@ func (h *GRPCHandler) TriggerManualIngestion(ctx context.Context, req *TriggerMa
 	}, nil
 }
 
-func (h *GRPCHandler) GetIngestionStatus(ctx context.Context, req *emptypb.Empty) (*GetIngestionStatusResponse, error) {
+func (h *GRPCHandler) GetIngestionStatus(ctx context.Context, req *emptypb.Empty) (*newsv1.GetIngestionStatusResponse, error) {
 	// Get pending articles count
 	pendingArticles, err := h.articleRepo.GetPendingArticles(ctx, 1000)
 	if err != nil {
@@ -535,9 +319,9 @@ func (h *GRPCHandler) GetIngestionStatus(ctx context.Context, req *emptypb.Empty
 	}
 
 	// Convert sources to status
-	sourceStatuses := make([]*SourceStatus, len(sources))
+	sourceStatuses := make([]*newsv1.SourceStatus, len(sources))
 	for i, source := range sources {
-		sourceStatuses[i] = &SourceStatus{
+		sourceStatuses[i] = &newsv1.SourceStatus{
 			SourceId:      uint32(source.ID),
 			SourceName:    source.Name,
 			Status:        source.Status,
@@ -547,7 +331,7 @@ func (h *GRPCHandler) GetIngestionStatus(ctx context.Context, req *emptypb.Empty
 		}
 	}
 
-	return &GetIngestionStatusResponse{
+	return &newsv1.GetIngestionStatusResponse{
 		Status:             "healthy",
 		PendingArticles:    int32(len(pendingArticles)),
 		ProcessingArticles: 0, // This would need to be calculated
@@ -557,7 +341,7 @@ func (h *GRPCHandler) GetIngestionStatus(ctx context.Context, req *emptypb.Empty
 	}, nil
 }
 
-func (h *GRPCHandler) GetProcessingLogs(ctx context.Context, req *GetProcessingLogsRequest) (*GetProcessingLogsResponse, error) {
+func (h *GRPCHandler) GetProcessingLogs(ctx context.Context, req *newsv1.GetProcessingLogsRequest) (*newsv1.GetProcessingLogsResponse, error) {
 	if req.ArticleId == "" {
 		return nil, status.Error(codes.InvalidArgument, "article_id is required")
 	}
@@ -574,9 +358,9 @@ func (h *GRPCHandler) GetProcessingLogs(ctx context.Context, req *GetProcessingL
 	}
 
 	// Convert to proto
-	protoLogs := make([]*ProcessingLog, len(logs))
+	protoLogs := make([]*newsv1.ProcessingLog, len(logs))
 	for i, log := range logs {
-		protoLogs[i] = &ProcessingLog{
+		protoLogs[i] = &newsv1.ProcessingLog{
 			Id:               uint32(log.ID),
 			ArticleId:        log.ArticleID.String(),
 			ProcessingStage:  log.ProcessingStage,
@@ -587,14 +371,14 @@ func (h *GRPCHandler) GetProcessingLogs(ctx context.Context, req *GetProcessingL
 		}
 	}
 
-	return &GetProcessingLogsResponse{
+	return &newsv1.GetProcessingLogsResponse{
 		Logs:       protoLogs,
 		TotalCount: int32(len(logs)),
 	}, nil
 }
 
-func (h *GRPCHandler) HealthCheck(ctx context.Context, req *emptypb.Empty) (*HealthCheckResponse, error) {
-	return &HealthCheckResponse{
+func (h *GRPCHandler) HealthCheck(ctx context.Context, req *emptypb.Empty) (*newsv1.HealthCheckResponse, error) {
+	return &newsv1.HealthCheckResponse{
 		Status:         "healthy",
 		Service:        "news-ingestion",
 		Timestamp:      timestamppb.Now(),
@@ -607,8 +391,8 @@ func (h *GRPCHandler) HealthCheck(ctx context.Context, req *emptypb.Empty) (*Hea
 }
 
 // Helper functions to convert between model and proto
-func (h *GRPCHandler) modelToProtoArticle(article *model.Article) *Article {
-	proto := &Article{
+func (h *GRPCHandler) modelToProtoArticle(article *model.Article) *newsv1.Article {
+	proto := &newsv1.Article{
 		Id:               article.ID.String(),
 		SourceId:         uint32(article.SourceID),
 		Title:            article.Title,
@@ -631,8 +415,8 @@ func (h *GRPCHandler) modelToProtoArticle(article *model.Article) *Article {
 	return proto
 }
 
-func (h *GRPCHandler) modelToProtoSource(source *model.NewsSource) *NewsSource {
-	return &NewsSource{
+func (h *GRPCHandler) modelToProtoSource(source *model.NewsSource) *newsv1.NewsSource {
+	return &newsv1.NewsSource{
 		Id:                 uint32(source.ID),
 		Name:               source.Name,
 		SourceType:         source.SourceType,

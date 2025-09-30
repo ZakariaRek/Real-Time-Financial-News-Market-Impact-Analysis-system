@@ -1,4 +1,4 @@
-// services/news-ingestion/proto/news_service.proto
+// services/news-ingestion/proto/NewsService.proto
 syntax = "proto3";
 
 package news.v1;
@@ -8,7 +8,7 @@ option go_package = "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impac
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 
-// NewsService handles article and source management
+// NewsService handles article and source management with streaming support
 service NewsService {
   // Article operations
   rpc CreateArticle(CreateArticleRequest) returns (CreateArticleResponse);
@@ -33,9 +33,63 @@ service NewsService {
 
   // Health check
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
+
+  // ========== STREAMING METHODS ==========
+
+  // Stream articles for NLP processing (server-side streaming)
+  rpc StreamArticles(StreamArticlesRequest) returns (stream StreamArticlesResponse);
+
+  // Stream articles by date range (server-side streaming)
+  rpc StreamArticlesByDateRange(StreamArticlesByDateRangeRequest) returns (stream StreamArticlesByDateRangeResponse);
+
+  // Acknowledge article processing completion (from NLP service)
+  rpc AcknowledgeArticleProcessing(AcknowledgeArticleProcessingRequest) returns (AcknowledgeArticleProcessingResponse);
 }
 
-// Article messages
+// ========== STREAMING MESSAGES ==========
+
+message StreamArticlesRequest {
+  string status = 1;              // pending, processing, completed, failed
+  repeated string symbols = 2;    // filter by symbols
+  int32 batch_size = 3;           // number of articles per batch
+  bool continuous = 4;            // continuous streaming mode
+}
+
+message StreamArticlesResponse {
+  Article article = 1;
+  int32 sequence_number = 2;
+  int32 total_count = 3;          // total in this batch (0 for continuous)
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message StreamArticlesByDateRangeRequest {
+  google.protobuf.Timestamp start_date = 1;
+  google.protobuf.Timestamp end_date = 2;
+  repeated string symbols = 3;
+  int32 batch_size = 4;
+}
+
+message StreamArticlesByDateRangeResponse {
+  Article article = 1;
+  int32 sequence_number = 2;
+  int32 total_count = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message AcknowledgeArticleProcessingRequest {
+  string article_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  int64 processing_time_ms = 4;
+}
+
+message AcknowledgeArticleProcessingResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ========== EXISTING MESSAGES ==========
+
 message Article {
   string id = 1;
   uint32 source_id = 2;
@@ -79,7 +133,7 @@ message ListArticlesRequest {
   repeated string symbols = 3;
   google.protobuf.Timestamp start_date = 4;
   google.protobuf.Timestamp end_date = 5;
-  string cursor = 6; // for pagination
+  string cursor = 6;
 }
 
 message ListArticlesResponse {
@@ -107,7 +161,6 @@ message DeleteArticleResponse {
   string message = 2;
 }
 
-// Source messages
 message NewsSource {
   uint32 id = 1;
   string name = 2;
@@ -172,10 +225,9 @@ message DeleteSourceResponse {
   string message = 2;
 }
 
-// Ingestion messages
 message TriggerManualIngestionRequest {
-  string source_type = 1; // rss, newsapi, twitter
-  repeated uint32 source_ids = 2; // optional: specific sources to ingest
+  string source_type = 1;
+  repeated uint32 source_ids = 2;
 }
 
 message TriggerManualIngestionResponse {
@@ -203,7 +255,6 @@ message SourceStatus {
   int32 articles_today = 6;
 }
 
-// Processing logs
 message ProcessingLog {
   uint32 id = 1;
   string article_id = 2;
@@ -216,8 +267,8 @@ message ProcessingLog {
 
 message GetProcessingLogsRequest {
   string article_id = 1;
-  string processing_stage = 2; // optional filter
-  string status = 3; // optional filter
+  string processing_stage = 2;
+  string status = 3;
   int32 limit = 4;
 }
 
@@ -226,7 +277,6 @@ message GetProcessingLogsResponse {
   int32 total_count = 2;
 }
 
-// Health check
 message HealthCheckResponse {
   string status = 1;
   string service = 2;
