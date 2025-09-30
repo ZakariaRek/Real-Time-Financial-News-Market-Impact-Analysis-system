@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package nlp.v1;
+
+option java_package = "com.market_impact.grpc.nlp";
+option java_outer_classname = "NLPProcessingProto";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+
+message SentimentAnalysis {
+  string article_id = 1;
+  float compound_score = 2;
+  float confidence = 3;
+  string primary_symbol = 4;
+  string model_version = 5;
+  google.protobuf.Timestamp analysis_timestamp = 6;
+}
+
+message AnalysisResult {
+  string article_id = 1;
+  SentimentAnalysis sentiment = 2;
+  int64 processing_time_ms = 5;
+  string status = 6;
+  string error_message = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message GetAnalysisRequest {
+  string article_id = 1;
+}
+
+message GetAnalysisResponse {
+  AnalysisResult result = 1;
+  bool found = 2;
+}
+
+message SentimentTrendsRequest {
+  string symbol = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  string interval = 4;
+  int32 limit = 5;
+}
+
+message SentimentTrendsResponse {
+  repeated SentimentTrend trends = 1;
+  int32 total_count = 2;
+}
+
+message SentimentTrend {
+  google.protobuf.Timestamp timestamp = 1;
+  string symbol = 2;
+  double avg_sentiment = 3;
+  int64 article_count = 4;
+  double volatility = 5;
+}
+
+service NLPProcessingService {
+  rpc GetAnalysisResult(GetAnalysisRequest) returns (GetAnalysisResponse);
+  rpc GetSentimentTrends(SentimentTrendsRequest) returns (SentimentTrendsResponse);
+}
