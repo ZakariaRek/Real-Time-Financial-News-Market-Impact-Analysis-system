@@ -76,6 +76,42 @@ func (h *HTTPHandler) CreateArticle(c *gin.Context) {
 	c.JSON(http.StatusCreated, article)
 }
 
+func (h *HTTPHandler) TriggerRSSIngestion(c *gin.Context) {
+	logrus.Info("Manual RSS ingestion triggered via HTTP")
+
+	if err := h.ingestionService.IngestFromRSS(c.Request.Context()); err != nil {
+		logrus.WithError(err).Error("Manual RSS ingestion failed")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   err.Error(),
+			"message": "RSS ingestion failed",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "RSS ingestion completed successfully",
+		"timestamp": time.Now().UTC(),
+	})
+}
+
+func (h *HTTPHandler) TriggerNewsAPIIngestion(c *gin.Context) {
+	logrus.Info("Manual NewsAPI ingestion triggered via HTTP")
+
+	if err := h.ingestionService.IngestFromNewsAPI(c.Request.Context()); err != nil {
+		logrus.WithError(err).Error("Manual NewsAPI ingestion failed")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   err.Error(),
+			"message": "NewsAPI ingestion failed",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "NewsAPI ingestion completed successfully",
+		"timestamp": time.Now().UTC(),
+	})
+}
+
 func (h *HTTPHandler) GetArticle(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)

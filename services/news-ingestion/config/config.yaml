@@ -77,7 +77,7 @@ news_sources:
   # RSS Feeds Configuration
   rss_feeds:
     - name: "Reuters Business"
-      url: "https://feeds.reuters.com/reuters/businessNews"
+      url: "https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best"
       enabled: true
 
     - name: "Bloomberg Markets"
@@ -105,11 +105,11 @@ processing:
   # Auto Ingestion
   enable_auto_ingestion: true   # Enable scheduled background jobs
 
-  # Cron Schedules (use standard cron format)
-  rss_schedule: "*/2 * * * *"         # Every 5 minutes
-  newsapi_schedule: "*/7 * * * *"    # Every 15 minutes
-  twitter_schedule: "*/5 * * * *"    # Every 10 minutes
-  cleanup_schedule: "0 0 * * *"       # Daily at midnight
+  # Cron Schedules (6 fields: second minute hour day month weekday)
+  rss_schedule: "0 */2 * * * *"        # Every 2 minutes (was: */2 * * * *)
+  newsapi_schedule: "0 */7 * * * *"    # Every 7 minutes (was: */7 * * * *)
+  twitter_schedule: "0 */5 * * * *"    # Every 5 minutes
+  cleanup_schedule: "0 0 0 * * *"      # Daily at midnight (was: 0 0 * * *)* *"       # Daily at midnight
 
   # Processing Settings
   batch_size: 100               # Number of articles to process in one batch

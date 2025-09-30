@@ -100,7 +100,7 @@ func main() {
 		grpcPort = 4002
 	}
 
-	httpServer := setupHTTPServer(container.httpHandler, httpPort, container.db)
+	httpServer := setupHTTPServer(container.httpHandler, httpPort, container.db, container.ingestionService)
 	grpcServer := setupGRPCServer(container.grpcHandler, grpcPort)
 
 	// Start background jobs
@@ -170,9 +170,15 @@ func initializeServices() (*ServiceContainer, error) {
 	if err := runMigrations(db); err != nil {
 		return nil, fmt.Errorf("migration failed: %w", err)
 	}
+	// Seed initial data
 
 	logrus.Info("✓ Database migrations completed")
-
+	// Seed initial data - ADD THIS SECTION
+	if err := db.SeedData(context.Background()); err != nil {
+		logrus.WithError(err).Warn("Failed to seed database, continuing anyway")
+	} else {
+		logrus.Info("✓ Database seeding completed")
+	}
 	// Create indexes
 	if err := db.CreateIndexes(); err != nil {
 		logrus.Warnf("Some indexes failed to create: %v", err)
@@ -393,8 +399,7 @@ func runMigrations(db *database.Database) error {
 	}
 	return nil
 }
-
-func setupHTTPServer(httpHandler *handler.HTTPHandler, port int, db *database.Database) *http.Server {
+func setupHTTPServer(httpHandler *handler.HTTPHandler, port int, db *database.Database, ingestionService service.IngestionService) *http.Server {
 	if viper.GetString("server.environment") == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -471,9 +476,53 @@ func setupHTTPServer(httpHandler *handler.HTTPHandler, port int, db *database.Da
 		// Ingestion routes
 		ingestion := v1.Group("/ingestion")
 		{
+			//ingestion.POST("/trigger", httpHandler.TriggerManualIngestion)
+			//ingestion.GET("/status", httpHandler.GetIngestionStatus)
 			ingestion.POST("/trigger", httpHandler.TriggerManualIngestion)
 			ingestion.GET("/status", httpHandler.GetIngestionStatus)
+			//ingestion.POST("/trigger/rss", httpHandler.TriggerRSSIngestion)
+			//ingestion.POST("/trigger/newsapi", httpHandler.TriggerNewsAPIIngestion)
 		}
+
+		// Manual RSS trigger
+		ingestion.POST("/trigger/rss", func(c *gin.Context) {
+			logrus.Info("Manual RSS ingestion triggered via HTTP")
+			ctx := context.Background()
+
+			if err := ingestionService.IngestFromRSS(ctx); err != nil {
+				logrus.WithError(err).Error("Manual RSS ingestion failed")
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error":   err.Error(),
+					"message": "RSS ingestion failed",
+				})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"message":   "RSS ingestion completed successfully",
+				"timestamp": time.Now().UTC(),
+			})
+		})
+
+		// Manual NewsAPI trigger
+		ingestion.POST("/trigger/newsapi", func(c *gin.Context) {
+			logrus.Info("Manual NewsAPI ingestion triggered via HTTP")
+			ctx := context.Background()
+
+			if err := ingestionService.IngestFromNewsAPI(ctx); err != nil {
+				logrus.WithError(err).Error("Manual NewsAPI ingestion failed")
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error":   err.Error(),
+					"message": "NewsAPI ingestion failed",
+				})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"message":   "NewsAPI ingestion completed successfully",
+				"timestamp": time.Now().UTC(),
+			})
+		})
 	}
 
 	return &http.Server{
