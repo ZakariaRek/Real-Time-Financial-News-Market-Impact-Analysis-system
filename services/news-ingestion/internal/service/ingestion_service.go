@@ -72,6 +72,20 @@ func NewIngestionService(
 		"XOM": true, "CVX": true, "PG": true, "JNJ": true, "V": true,
 	}
 
+	//return &ingestionService{
+	//	articleRepo:       articleRepo,
+	//	sourceRepo:        sourceRepo,
+	//	processingLogRepo: processingLogRepo,
+	//	rateLimitRepo:     rateLimitRepo,
+	//	deduplicationSvc:  deduplicationSvc,
+	//	newsAPIClient:     newsAPIClient,
+	//	rssClient:         rssClient,
+	//	twitterClient:     twitterClient,
+	//	rateLimitManager:  &RateLimitManager{rateLimitRepo: rateLimitRepo},
+	//	symbolExtractor:   &SymbolExtractor{financialSymbols: symbols},
+	//	contentValidator:  &ContentValidator{minContentLength: 50, maxContentLength: 50000}, // Changed from 100 to 50
+	//}
+	// Line ~51 - Change minimum from 50 to 20
 	return &ingestionService{
 		articleRepo:       articleRepo,
 		sourceRepo:        sourceRepo,
@@ -83,8 +97,78 @@ func NewIngestionService(
 		twitterClient:     twitterClient,
 		rateLimitManager:  &RateLimitManager{rateLimitRepo: rateLimitRepo},
 		symbolExtractor:   &SymbolExtractor{financialSymbols: symbols},
-		contentValidator:  &ContentValidator{minContentLength: 100, maxContentLength: 50000},
+		contentValidator:  &ContentValidator{minContentLength: 20, maxContentLength: 50000}, // Changed 50 → 20
 	}
+}
+func (s *ingestionService) ingestFromSingleRSSSource(ctx context.Context, source *model.NewsSource) error {
+	logrus.Infof("🔍 Fetching RSS feed from: %s (%s)", source.Name, source.BaseURL)
+
+	// Check rate limits
+	if !s.rateLimitManager.CanMakeRequest(ctx, source.ID, source.RateLimitPerMinute) {
+		logrus.Warnf("⚠️ Rate limit exceeded for source: %s", source.Name)
+		return nil
+	}
+
+	// Fetch RSS feed
+	feeds, err := s.rssClient.FetchFeed(ctx, source.BaseURL)
+	if err != nil {
+		logrus.WithError(err).Errorf("❌ Failed to fetch RSS feed from %s", source.Name)
+		return fmt.Errorf("failed to fetch RSS feed: %w", err)
+	}
+
+	logrus.Infof("📰 Fetched %d items from %s", len(feeds), source.Name)
+
+	if len(feeds) == 0 {
+		logrus.Warnf("⚠️ No items returned from RSS feed: %s", source.Name)
+		return nil
+	}
+
+	var processedCount int
+	var skippedDuplicate int
+	var skippedValidation int
+
+	for idx, item := range feeds {
+		logrus.Debugf("Processing item %d/%d: %s", idx+1, len(feeds), item.Title)
+
+		article := &model.Article{
+			SourceID:         source.ID,
+			Title:            item.Title,
+			Content:          item.Description,
+			URL:              item.Link,
+			PublishedAt:      item.PubDate,
+			ProcessingStatus: model.StatusPending,
+			ContentHash:      s.generateContentHash(item.Title + item.Description),
+		}
+
+		// Validate and enrich article
+		if err := s.validateAndEnrichArticle(ctx, article); err != nil {
+			logrus.WithError(err).Warnf("⚠️ Article validation failed: %s (length: %d)", article.Title, len(article.Content))
+			skippedValidation++
+			continue
+		}
+
+		// Check for duplicates
+		if s.deduplicationSvc.IsDuplicate(ctx, article) {
+			logrus.Debugf("⏭️ Duplicate article detected: %s", article.Title)
+			skippedDuplicate++
+			continue
+		}
+
+		// Save article
+		if err := s.articleRepo.Create(ctx, article); err != nil {
+			logrus.WithError(err).Errorf("❌ Failed to save article: %s", article.Title)
+			continue
+		}
+
+		processedCount++
+		s.logProcessingStep(ctx, article.ID, "ingestion", "completed", "")
+		logrus.Infof("✅ Saved article: %s (ID: %s)", article.Title, article.ID)
+	}
+
+	logrus.Infof("📊 RSS ingestion summary for %s: %d saved, %d duplicates, %d validation failures, %d total",
+		source.Name, processedCount, skippedDuplicate, skippedValidation, len(feeds))
+
+	return nil
 }
 
 func (s *ingestionService) IngestFromRSS(ctx context.Context) error {
@@ -138,56 +222,56 @@ func (s *ingestionService) IngestFromRSS(ctx context.Context) error {
 	return nil
 }
 
-func (s *ingestionService) ingestFromSingleRSSSource(ctx context.Context, source *model.NewsSource) error {
-	// Check rate limits
-	if !s.rateLimitManager.CanMakeRequest(ctx, source.ID, source.RateLimitPerMinute) {
-		logrus.Warnf("Rate limit exceeded for source: %s", source.Name)
-		return nil
-	}
-
-	// Fetch RSS feed
-	feeds, err := s.rssClient.FetchFeed(ctx, source.BaseURL)
-	if err != nil {
-		return fmt.Errorf("failed to fetch RSS feed: %w", err)
-	}
-
-	var processedCount int
-	for _, item := range feeds {
-		article := &model.Article{
-			SourceID:         source.ID,
-			Title:            item.Title,
-			Content:          item.Description,
-			URL:              item.Link,
-			PublishedAt:      item.PubDate,
-			ProcessingStatus: model.StatusPending,
-			ContentHash:      s.generateContentHash(item.Title + item.Description),
-		}
-
-		// Validate and enrich article
-		if err := s.validateAndEnrichArticle(ctx, article); err != nil {
-			logrus.WithError(err).Warnf("Article validation failed: %s", article.Title)
-			continue
-		}
-
-		// Check for duplicates
-		if s.deduplicationSvc.IsDuplicate(ctx, article) {
-			logrus.Debugf("Duplicate article detected: %s", article.Title)
-			continue
-		}
-
-		// Save article
-		if err := s.articleRepo.Create(ctx, article); err != nil {
-			logrus.WithError(err).Errorf("Failed to save article: %s", article.Title)
-			continue
-		}
-
-		processedCount++
-		s.logProcessingStep(ctx, article.ID, "ingestion", "completed", "")
-	}
-
-	logrus.Infof("Processed %d articles from RSS source: %s", processedCount, source.Name)
-	return nil
-}
+//func (s *ingestionService) ingestFromSingleRSSSource(ctx context.Context, source *model.NewsSource) error {
+//	// Check rate limits
+//	if !s.rateLimitManager.CanMakeRequest(ctx, source.ID, source.RateLimitPerMinute) {
+//		logrus.Warnf("Rate limit exceeded for source: %s", source.Name)
+//		return nil
+//	}
+//
+//	// Fetch RSS feed
+//	feeds, err := s.rssClient.FetchFeed(ctx, source.BaseURL)
+//	if err != nil {
+//		return fmt.Errorf("failed to fetch RSS feed: %w", err)
+//	}
+//
+//	var processedCount int
+//	for _, item := range feeds {
+//		article := &model.Article{
+//			SourceID:         source.ID,
+//			Title:            item.Title,
+//			Content:          item.Description,
+//			URL:              item.Link,
+//			PublishedAt:      item.PubDate,
+//			ProcessingStatus: model.StatusPending,
+//			ContentHash:      s.generateContentHash(item.Title + item.Description),
+//		}
+//
+//		// Validate and enrich article
+//		if err := s.validateAndEnrichArticle(ctx, article); err != nil {
+//			logrus.WithError(err).Warnf("Article validation failed: %s", article.Title)
+//			continue
+//		}
+//
+//		// Check for duplicates
+//		if s.deduplicationSvc.IsDuplicate(ctx, article) {
+//			logrus.Debugf("Duplicate article detected: %s", article.Title)
+//			continue
+//		}
+//
+//		// Save article
+//		if err := s.articleRepo.Create(ctx, article); err != nil {
+//			logrus.WithError(err).Errorf("Failed to save article: %s", article.Title)
+//			continue
+//		}
+//
+//		processedCount++
+//		s.logProcessingStep(ctx, article.ID, "ingestion", "completed", "")
+//	}
+//
+//	logrus.Infof("Processed %d articles from RSS source: %s", processedCount, source.Name)
+//	return nil
+//}
 
 func (s *ingestionService) IngestFromNewsAPI(ctx context.Context) error {
 	logrus.Info("Starting NewsAPI ingestion")

@@ -3,8 +3,8 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
+	_ "encoding/json"
+	_ "fmt"
 	"time"
 
 	"gorm.io/gorm"

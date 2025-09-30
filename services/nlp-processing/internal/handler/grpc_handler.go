@@ -1,3 +1,4 @@
+// services/nlp-processing/internal/handler/grpc_handler.go
 package handler
 
 import (
@@ -19,6 +20,7 @@ import (
 	newsv1 "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/proto/gen/news/v1"
 )
 
+// GRPCHandler implementation
 type GRPCHandler struct {
 	newsv1.UnimplementedNewsServiceServer
 	ingestionService service.IngestionService
@@ -144,8 +146,8 @@ func (h *GRPCHandler) UpdateArticleStatus(ctx context.Context, req *newsv1.Updat
 		return nil, status.Error(codes.InvalidArgument, "invalid article ID format")
 	}
 
-	status := model.ProcessingStatus(req.Status)
-	if err := h.articleRepo.UpdateStatus(ctx, id, status); err != nil {
+	processingStatus := model.ProcessingStatus(req.Status)
+	if err := h.articleRepo.UpdateStatus(ctx, id, processingStatus); err != nil {
 		logrus.WithError(err).Error("Failed to update article status via gRPC")
 		return nil, status.Error(codes.Internal, "failed to update article status")
 	}

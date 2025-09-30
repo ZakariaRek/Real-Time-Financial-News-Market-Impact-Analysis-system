@@ -1,0 +1,17 @@
+#version: v1
+#plugins:
+#  - name: go
+#    out: ./gen/nlp/v1
+#    opt: paths=source_relative
+#  - name: go-grpc
+#    out: ./gen/nlp/v1
+#    opt: paths=source_relative
+
+version: v1
+plugins:
+  - name: go
+    out: ./gen
+    opt: paths=source_relative
+  - name: go-grpc
+    out: ./gen
+    opt: paths=source_relative
