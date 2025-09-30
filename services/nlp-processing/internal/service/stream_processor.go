@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -12,15 +13,11 @@ import (
 	newsv1 "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/proto/services/news-ingestion/proto/gen"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/client"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/model"
-	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/repository"
 )
 
 type StreamProcessor struct {
-	newsClient        *client.NewsIngestionClient
-	nlpService        NLPProcessingService
-	articleRepo       repository.ArticleRepository
-	processingLogRepo repository.ProcessingLogRepository
-
+	newsClient     *client.NewsIngestionClient
+	nlpService     NLPProcessingService
 	workerCount    int
 	batchSize      int32
 	processedCount int64
@@ -37,8 +34,6 @@ type StreamProcessorConfig struct {
 func NewStreamProcessor(
 	config StreamProcessorConfig,
 	nlpService NLPProcessingService,
-	articleRepo repository.ArticleRepository,
-	processingLogRepo repository.ProcessingLogRepository,
 ) (*StreamProcessor, error) {
 	newsClient, err := client.NewNewsIngestionClient(config.NewsIngestionEndpoint)
 	if err != nil {
@@ -46,22 +41,18 @@ func NewStreamProcessor(
 	}
 
 	return &StreamProcessor{
-		newsClient:        newsClient,
-		nlpService:        nlpService,
-		articleRepo:       articleRepo,
-		processingLogRepo: processingLogRepo,
-		workerCount:       config.WorkerCount,
-		batchSize:         config.BatchSize,
+		newsClient:  newsClient,
+		nlpService:  nlpService,
+		workerCount: config.WorkerCount,
+		batchSize:   config.BatchSize,
 	}, nil
 }
 
 func (sp *StreamProcessor) Start(ctx context.Context) error {
-	logrus.Info("Starting NLP stream processor...")
+	logrus.Info("Starting S&P 500 sentiment analysis stream processor...")
 
-	// Create worker pool
 	articleChan, errorChan := sp.newsClient.StreamPendingArticles(ctx, sp.batchSize)
 
-	// Start workers
 	var wg sync.WaitGroup
 	for i := 0; i < sp.workerCount; i++ {
 		wg.Add(1)
@@ -71,14 +62,12 @@ func (sp *StreamProcessor) Start(ctx context.Context) error {
 		}(i)
 	}
 
-	// Monitor errors
 	go func() {
 		for err := range errorChan {
 			logrus.WithError(err).Error("Stream error occurred")
 		}
 	}()
 
-	// Log statistics periodically
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -98,7 +87,7 @@ func (sp *StreamProcessor) Start(ctx context.Context) error {
 }
 
 func (sp *StreamProcessor) worker(ctx context.Context, workerID int, articleChan <-chan *newsv1.Article) {
-	logrus.WithField("worker_id", workerID).Info("Worker started")
+	logrus.WithField("worker_id", workerID).Info("Sentiment analysis worker started")
 
 	for {
 		select {
@@ -128,10 +117,7 @@ func (sp *StreamProcessor) worker(ctx context.Context, workerID int, articleChan
 func (sp *StreamProcessor) processArticle(ctx context.Context, protoArticle *newsv1.Article) error {
 	startTime := time.Now()
 
-	// Convert proto to model
 	article := sp.protoToModel(protoArticle)
-
-	// Process with NLP service
 	result, err := sp.nlpService.ProcessArticle(ctx, article)
 
 	processingTime := time.Since(startTime).Milliseconds()
@@ -143,7 +129,6 @@ func (sp *StreamProcessor) processArticle(ctx context.Context, protoArticle *new
 		errorMsg = result.ErrorMessage
 	}
 
-	// Acknowledge to news-ingestion service
 	if ackErr := sp.newsClient.AcknowledgeProcessing(
 		ctx,
 		article.ID.String(),
@@ -153,9 +138,6 @@ func (sp *StreamProcessor) processArticle(ctx context.Context, protoArticle *new
 	); ackErr != nil {
 		logrus.WithError(ackErr).Warn("Failed to acknowledge article processing")
 	}
-
-	// Log processing
-	sp.logArticleProcessing(ctx, article.ID, success, processingTime, errorMsg)
 
 	return err
 }
@@ -177,25 +159,6 @@ func (sp *StreamProcessor) protoToModel(proto *newsv1.Article) *model.Article {
 	}
 }
 
-func (sp *StreamProcessor) logArticleProcessing(ctx context.Context, articleID uuid.UUID, success bool, processingTime int64, errorMsg string) {
-	status := "completed"
-	if !success {
-		status = "failed"
-	}
-
-	log := &model.ArticleProcessingLog{
-		ArticleID:        articleID,
-		ProcessingStage:  "nlp_processing",
-		Status:           status,
-		ProcessingTimeMs: int(processingTime),
-		ErrorMessage:     errorMsg,
-	}
-
-	if err := sp.processingLogRepo.Create(ctx, log); err != nil {
-		logrus.WithError(err).Error("Failed to create processing log")
-	}
-}
-
 func (sp *StreamProcessor) incrementProcessed() {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
@@ -212,17 +175,17 @@ func (sp *StreamProcessor) logStatistics() {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
+	total := sp.processedCount + sp.failedCount
+	successRate := 0.0
+	if total > 0 {
+		successRate = float64(sp.processedCount) / float64(total) * 100
+	}
+
 	logrus.WithFields(logrus.Fields{
-		"processed": sp.processedCount,
-		"failed":    sp.failedCount,
-		"success_rate": func() float64 {
-			total := sp.processedCount + sp.failedCount
-			if total == 0 {
-				return 0
-			}
-			return float64(sp.processedCount) / float64(total) * 100
-		}(),
-	}).Info("Stream processor statistics")
+		"processed":    sp.processedCount,
+		"failed":       sp.failedCount,
+		"success_rate": fmt.Sprintf("%.2f%%", successRate),
+	}).Info("S&P 500 sentiment analysis statistics")
 }
 
 func (sp *StreamProcessor) Close() error {
