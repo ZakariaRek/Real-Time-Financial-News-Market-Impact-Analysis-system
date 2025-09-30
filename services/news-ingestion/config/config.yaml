@@ -13,7 +13,7 @@ database:
     port: 5432
     database: news_ingestion
     username: postgres
-    password: zakaria           # Use environment variable in production: ${DB_PASSWORD}
+    password: yahyasd56          # Use environment variable in production: ${DB_PASSWORD}
 
     # Connection Pool Settings (optimized for AWS RDS)
     ssl_mode: disable           # For production: require

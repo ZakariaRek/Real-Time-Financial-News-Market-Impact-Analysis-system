@@ -709,7 +709,7 @@ func initConfig() error {
 	viper.SetDefault("database.postgres.port", 5432)
 	viper.SetDefault("database.postgres.database", "news_ingestion")
 	viper.SetDefault("database.postgres.username", "postgres")
-	viper.SetDefault("database.postgres.password", "zakaria")
+	viper.SetDefault("database.postgres.password", "yahyasd56")
 	viper.SetDefault("database.postgres.ssl_mode", "disable")
 	viper.SetDefault("database.postgres.max_open_conns", 25)
 	viper.SetDefault("database.postgres.max_idle_conns", 5)
