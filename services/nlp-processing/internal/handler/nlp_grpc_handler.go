@@ -3,7 +3,6 @@ package handler
 
 import (
 	"context"
-	"io"
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -35,53 +34,7 @@ func NewNLPGRPCHandler(
 }
 
 func (h *NLPGRPCHandler) StreamArticles(stream nlpv1.NLPProcessingService_StreamArticlesServer) error {
-	logrus.Info("StreamArticles gRPC method called")
-
-	articleChan := make(chan *model.Article, 100)
-	resultChan := make(chan *model.AnalysisResult, 100)
-
-	ctx := context.Background()
-
-	// Start processing goroutine
-	go func() {
-		defer close(resultChan)
-		if err := h.nlpService.StreamProcessing(ctx, articleChan, resultChan); err != nil {
-			logrus.WithError(err).Error("Stream processing failed")
-		}
-	}()
-
-	// Start sending results goroutine
-	go func() {
-		for result := range resultChan {
-			protoResult := h.modelToProtoAnalysisResult(result)
-			if err := stream.Send(protoResult); err != nil {
-				logrus.WithError(err).Error("Failed to send analysis result")
-				return
-			}
-		}
-	}()
-
-	// Receive articles from stream
-	for {
-		article, err := stream.Recv()
-		if err == io.EOF {
-			close(articleChan)
-			break
-		}
-		if err != nil {
-			logrus.WithError(err).Error("Failed to receive article from stream")
-			return status.Error(codes.Internal, "failed to receive article")
-		}
-
-		modelArticle := h.protoToModelArticle(article)
-		select {
-		case articleChan <- modelArticle:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-
-	return nil
+	return status.Error(codes.Unimplemented, "streaming not implemented - use ProcessBatch instead")
 }
 
 func (h *NLPGRPCHandler) ProcessArticle(ctx context.Context, req *nlpv1.ProcessArticleRequest) (*nlpv1.ProcessArticleResponse, error) {
@@ -91,10 +44,7 @@ func (h *NLPGRPCHandler) ProcessArticle(ctx context.Context, req *nlpv1.ProcessA
 		return nil, status.Error(codes.InvalidArgument, "article is required")
 	}
 
-	// Convert proto to model
 	article := h.protoToModelArticle(req.Article)
-
-	// Process the article
 	result, err := h.nlpService.ProcessArticle(ctx, article)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to process article")
@@ -119,20 +69,17 @@ func (h *NLPGRPCHandler) ProcessBatch(ctx context.Context, req *nlpv1.BatchProce
 		return nil, status.Error(codes.InvalidArgument, "batch size cannot exceed 100")
 	}
 
-	// Convert proto to model
 	articles := make([]*model.Article, len(req.Articles))
 	for i, protoArticle := range req.Articles {
 		articles[i] = h.protoToModelArticle(protoArticle)
 	}
 
-	// Process the batch
 	results, err := h.nlpService.ProcessBatch(ctx, articles, h.protoToModelProcessingOptions(req.Options))
 	if err != nil {
 		logrus.WithError(err).Error("Failed to process batch")
 		return nil, status.Error(codes.Internal, "failed to process batch")
 	}
 
-	// Convert results to proto
 	protoResults := make([]*nlpv1.AnalysisResult, len(results))
 	successfulCount := int32(0)
 	failedCount := int32(0)
@@ -187,28 +134,22 @@ func (h *NLPGRPCHandler) GetSentimentTrends(ctx context.Context, req *nlpv1.Sent
 		return nil, status.Error(codes.InvalidArgument, "symbol is required")
 	}
 
-	query := &model.SentimentQuery{
-		Symbol:    req.Symbol,
-		StartTime: req.StartTime.AsTime(),
-		EndTime:   req.EndTime.AsTime(),
-		Interval:  req.Interval,
-	}
-
-	trends, err := h.nlpService.GetSentimentTrends(ctx, query)
+	// Query sentiment analysis repository directly
+	trends, err := h.analysisRepo.GetSentimentTrends(ctx, req.Symbol, req.StartTime.AsTime(), req.EndTime.AsTime())
 	if err != nil {
 		logrus.WithError(err).Error("Failed to get sentiment trends")
 		return nil, status.Error(codes.Internal, "failed to get sentiment trends")
 	}
 
-	// Convert to proto
+	// Convert to proto format
 	protoTrends := make([]*nlpv1.SentimentTrend, len(trends))
 	for i, trend := range trends {
 		protoTrends[i] = &nlpv1.SentimentTrend{
-			Timestamp:    timestamppb.New(trend.Timestamp),
-			Symbol:       trend.Symbol,
-			AvgSentiment: trend.AvgSentiment,
-			ArticleCount: trend.ArticleCount,
-			Volatility:   trend.Volatility,
+			Timestamp:    timestamppb.New(trend.AnalysisTimestamp),
+			Symbol:       trend.PrimarySymbol,
+			AvgSentiment: float64(trend.CompoundScore),
+			ArticleCount: 1,
+			Volatility:   0.0,
 		}
 	}
 
@@ -221,8 +162,7 @@ func (h *NLPGRPCHandler) GetSentimentTrends(ctx context.Context, req *nlpv1.Sent
 func (h *NLPGRPCHandler) GetEntityMentions(ctx context.Context, req *nlpv1.EntityMentionsRequest) (*nlpv1.EntityMentionsResponse, error) {
 	logrus.WithField("entity", req.EntityText).Info("GetEntityMentions gRPC method called")
 
-	// This would typically query the analysis repository for entity mentions
-	// For now, return empty response
+	// Not implemented for simplified sentiment-only analysis
 	return &nlpv1.EntityMentionsResponse{
 		Mentions:   []*nlpv1.EntityMention{},
 		TotalCount: 0,
@@ -232,8 +172,7 @@ func (h *NLPGRPCHandler) GetEntityMentions(ctx context.Context, req *nlpv1.Entit
 func (h *NLPGRPCHandler) GetTopicDistribution(ctx context.Context, req *nlpv1.TopicDistributionRequest) (*nlpv1.TopicDistributionResponse, error) {
 	logrus.Info("GetTopicDistribution gRPC method called")
 
-	// This would typically query the analysis repository for topic distribution
-	// For now, return stub data
+	// Not implemented for simplified sentiment-only analysis
 	return &nlpv1.TopicDistributionResponse{
 		Topics: []*nlpv1.TopicDistribution{},
 	}, nil
@@ -242,17 +181,15 @@ func (h *NLPGRPCHandler) GetTopicDistribution(ctx context.Context, req *nlpv1.To
 func (h *NLPGRPCHandler) StreamSentimentUpdates(req *nlpv1.SentimentStreamRequest, stream nlpv1.NLPProcessingService_StreamSentimentUpdatesServer) error {
 	logrus.Info("StreamSentimentUpdates gRPC method called")
 
-	// This would implement real-time sentiment streaming
-	// For now, return empty implementation
-	return nil
+	// Not implemented for simplified version
+	return status.Error(codes.Unimplemented, "sentiment streaming not yet implemented")
 }
 
 func (h *NLPGRPCHandler) StreamBreakingNews(req *nlpv1.BreakingNewsRequest, stream nlpv1.NLPProcessingService_StreamBreakingNewsServer) error {
 	logrus.Info("StreamBreakingNews gRPC method called")
 
-	// This would implement real-time breaking news streaming
-	// For now, return empty implementation
-	return nil
+	// Not implemented for simplified version
+	return status.Error(codes.Unimplemented, "breaking news streaming not yet implemented")
 }
 
 func (h *NLPGRPCHandler) HealthCheck(ctx context.Context, req *emptypb.Empty) (*nlpv1.HealthCheckResponse, error) {
@@ -266,16 +203,12 @@ func (h *NLPGRPCHandler) HealthCheck(ctx context.Context, req *emptypb.Empty) (*
 		Timestamp:      timestamppb.Now(),
 		DatabaseStatus: "connected",
 		ModelStatus: &nlpv1.ModelStatus{
-			FinbertLoaded:    modelStatus.FinbertLoaded,
-			NerModelLoaded:   modelStatus.NerModelLoaded,
-			TopicModelLoaded: modelStatus.TopicModelLoaded,
-			FinbertVersion:   modelStatus.FinbertVersion,
-			NerVersion:       modelStatus.NerVersion,
-			TopicVersion:     modelStatus.TopicVersion,
+			FinbertLoaded:  modelStatus.FinbertLoaded,
+			FinbertVersion: modelStatus.FinbertVersion,
 		},
 		Details: map[string]string{
 			"version": "1.0.0",
-			"uptime":  "running",
+			"mode":    "s&p500-sentiment-only",
 		},
 	}, nil
 }
@@ -285,17 +218,15 @@ func (h *NLPGRPCHandler) GetProcessingStatus(ctx context.Context, req *emptypb.E
 
 	return &nlpv1.ProcessingStatusResponse{
 		Status:              "healthy",
-		PendingArticles:     0, // Would be calculated from actual data
-		ProcessingArticles:  0, // Would be calculated from actual data
-		CompletedToday:      0, // Would be calculated from actual data
-		FailedToday:         0, // Would be calculated from actual data
-		AvgProcessingTimeMs: 0, // Would be calculated from actual data
+		PendingArticles:     0,
+		ProcessingArticles:  0,
+		CompletedToday:      0,
+		FailedToday:         0,
+		AvgProcessingTimeMs: 0,
 		LastProcessed:       timestamppb.Now(),
 		Performance: &nlpv1.ModelPerformance{
-			SentimentAccuracy: 0.85, // Mock data
-			NerPrecision:      0.90, // Mock data
-			TopicAccuracy:     0.82, // Mock data
-			TotalProcessed:    0,    // Would be calculated from actual data
+			SentimentAccuracy: 0.85,
+			TotalProcessed:    0,
 			LastUpdated:       timestamppb.Now(),
 		},
 	}, nil
@@ -328,7 +259,6 @@ func (h *NLPGRPCHandler) modelToProtoAnalysisResult(result *model.AnalysisResult
 		CreatedAt:        timestamppb.New(result.CreatedAt),
 	}
 
-	// Add sentiment analysis if present
 	if result.SentimentAnalysis != nil {
 		proto.Sentiment = &nlpv1.SentimentAnalysis{
 			ArticleId:         result.SentimentAnalysis.ArticleID,
@@ -340,33 +270,6 @@ func (h *NLPGRPCHandler) modelToProtoAnalysisResult(result *model.AnalysisResult
 		}
 	}
 
-	// Add entity recognition if present
-	if len(result.EntityRecognition) > 0 {
-		proto.Entities = make([]*nlpv1.EntityRecognition, len(result.EntityRecognition))
-		for i, entity := range result.EntityRecognition {
-			proto.Entities[i] = &nlpv1.EntityRecognition{
-				ArticleId:      entity.ArticleID,
-				EntityText:     entity.EntityText,
-				EntityType:     entity.EntityType,
-				StockSymbol:    entity.StockSymbol,
-				Confidence:     entity.Confidence,
-				EntityCategory: entity.EntityCategory,
-			}
-		}
-	}
-
-	// Add topic classification if present
-	if result.TopicClassification != nil {
-		proto.Topic = &nlpv1.TopicClassification{
-			ArticleId:              result.TopicClassification.ArticleID,
-			PrimaryTopic:           result.TopicClassification.PrimaryTopic,
-			PrimaryTopicConfidence: result.TopicClassification.PrimaryTopicConfidence,
-			Keywords:               result.TopicClassification.Keywords,
-			UrgencyScore:           result.TopicClassification.UrgencyScore,
-			BreakingNewsIndicator:  result.TopicClassification.BreakingNewsIndicator == 1,
-		}
-	}
-
 	return proto
 }
 
@@ -374,19 +277,13 @@ func (h *NLPGRPCHandler) protoToModelProcessingOptions(proto *nlpv1.ProcessingOp
 	if proto == nil {
 		return &model.ProcessingOptions{
 			EnableSentiment:     true,
-			EnableNER:           true,
-			EnableTopic:         true,
-			EnableKeywords:      true,
-			ConfidenceThreshold: 0.7,
+			ConfidenceThreshold: 0.3,
 			ModelVersion:        "1.0",
 		}
 	}
 
 	return &model.ProcessingOptions{
 		EnableSentiment:     proto.EnableSentiment,
-		EnableNER:           proto.EnableNer,
-		EnableTopic:         proto.EnableTopic,
-		EnableKeywords:      proto.EnableKeywords,
 		ConfidenceThreshold: proto.ConfidenceThreshold,
 		ModelVersion:        proto.ModelVersion,
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/database"
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/handler"
@@ -23,59 +24,54 @@ import (
 )
 
 func main() {
-	// Load configuration
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath("./config")
-	viper.AddConfigPath(".")
-
-	if err := viper.ReadInConfig(); err != nil {
-		logrus.Fatalf("Error reading config file: %v", err)
+	// Initialize configuration
+	if err := initConfig(); err != nil {
+		logrus.Fatalf("Failed to initialize config: %v", err)
 	}
 
-	// Setup logging
-	setupLogging()
-
-	logrus.Info("🚀 Starting NLP Processing Service...")
+	initLogger()
+	logrus.Info("Starting S&P 500 NLP Processing Service (Sentiment Analysis)...")
 
 	// Initialize database
-	db, err := initializeDatabase()
+	db, err := initDatabase()
 	if err != nil {
 		logrus.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
 
+	// Run migrations
+	if err := db.AutoMigrate(); err != nil {
+		logrus.Fatalf("Failed to run migrations: %v", err)
+	}
+
+	// Create indexes for better query performance
+	if err := db.CreateIndexes(); err != nil {
+		logrus.Warnf("Failed to create some indexes: %v", err)
+	}
+
 	// Initialize Redis
-	redisClient := initializeRedis()
+	redisClient := initRedis()
 	defer redisClient.Close()
+
+	// Test Redis connection
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		logrus.Warnf("Redis connection failed, continuing without cache: %v", err)
+	} else {
+		logrus.Info("Redis connected successfully")
+	}
 
 	// Initialize repositories
 	analysisRepo := repository.NewAnalysisRepository(db.DB)
 	cacheRepo := repository.NewCacheRepository(redisClient)
-	articleRepo := repository.NewArticleRepository(db.DB)
-	sourceRepo := repository.NewSourceRepository(db.DB)
-	processingLogRepo := repository.NewProcessingLogRepository(db.DB)
 
-	// Initialize ML services
-	sentimentService := initializeSentimentService()
-	nerService := initializeNERService()
-	topicService := initializeTopicService()
-
-	// Initialize NLP processing service
-	nlpConfig := service.NLPConfig{
-		WorkerCount:    viper.GetInt("processing.worker_count"),
-		BatchSize:      viper.GetInt("processing.batch_size"),
-		TimeoutSeconds: viper.GetInt("processing.timeout_seconds"),
-		RetryAttempts:  viper.GetInt("processing.retry_attempts"),
-	}
+	// Initialize services
+	logrus.Info("Initializing sentiment analysis service...")
+	sentimentService := service.NewSentimentService()
 
 	nlpService := service.NewNLPProcessingService(
 		sentimentService,
-		nerService,
-		topicService,
 		analysisRepo,
 		cacheRepo,
-		nlpConfig,
 	)
 
 	// Initialize models
@@ -84,68 +80,131 @@ func main() {
 		logrus.Fatalf("Failed to initialize NLP models: %v", err)
 	}
 
-	// Initialize stream processor
-	streamConfig := service.StreamProcessorConfig{
-		NewsIngestionEndpoint: viper.GetString("external_services.news_ingestion_service.grpc_endpoint"),
-		WorkerCount:           nlpConfig.WorkerCount,
-		BatchSize:             int32(nlpConfig.BatchSize),
-	}
-
-	streamProcessor, err := service.NewStreamProcessor(
-		streamConfig,
-		nlpService,
-		articleRepo,
-		processingLogRepo,
+	// Initialize gRPC server
+	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(viper.GetInt("grpc.max_receive_message_size")),
+		grpc.MaxSendMsgSize(viper.GetInt("grpc.max_send_message_size")),
 	)
-	if err != nil {
-		logrus.Fatalf("Failed to create stream processor: %v", err)
-	}
-	defer streamProcessor.Close()
+
+	// Register gRPC handler
+	nlpHandler := handler.NewNLPGRPCHandler(nlpService, analysisRepo)
+	nlpv1.RegisterNLPProcessingServiceServer(grpcServer, nlpHandler)
+
+	// Enable reflection for grpcurl
+	reflection.Register(grpcServer)
 
 	// Start gRPC server
-	grpcServer := startGRPCServer(nlpService, analysisRepo, articleRepo, sourceRepo, processingLogRepo)
-	defer grpcServer.GracefulStop()
-
-	// Start stream processing in background
-	processorCtx, cancelProcessor := context.WithCancel(context.Background())
-	defer cancelProcessor()
+	grpcPort := viper.GetInt("grpc.port")
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
+	if err != nil {
+		logrus.Fatalf("Failed to listen on port %d: %v", grpcPort, err)
+	}
 
 	go func() {
-		if err := streamProcessor.Start(processorCtx); err != nil {
-			logrus.WithError(err).Error("Stream processor error")
+		logrus.Infof("gRPC server listening on port %d", grpcPort)
+		if err := grpcServer.Serve(lis); err != nil {
+			logrus.Fatalf("Failed to serve gRPC: %v", err)
 		}
 	}()
 
-	logrus.Info("✅ NLP Processing Service is running")
-	logrus.Infof("📊 Processing articles from: %s", streamConfig.NewsIngestionEndpoint)
-	logrus.Infof("🔧 Workers: %d, Batch Size: %d", streamConfig.WorkerCount, streamConfig.BatchSize)
+	// Initialize and start stream processor
+	streamProcessor, err := initStreamProcessor(nlpService)
+	if err != nil {
+		logrus.Warnf("Failed to initialize stream processor: %v", err)
+		logrus.Info("Service will run without automatic article processing")
+	} else {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	// Wait for shutdown signal
-	waitForShutdown(cancelProcessor)
+		go func() {
+			if err := streamProcessor.Start(ctx); err != nil {
+				logrus.WithError(err).Error("Stream processor failed")
+			}
+		}()
+	}
 
-	logrus.Info("🛑 NLP Processing Service stopped")
+	logrus.Info("S&P 500 NLP Processing Service started successfully!")
+	logrus.Info("Service is ready to analyze sentiment for S&P 500 news articles")
+
+	// Wait for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	logrus.Info("Shutting down NLP Processing Service...")
+
+	// Graceful shutdown
+	stopped := make(chan struct{})
+	go func() {
+		grpcServer.GracefulStop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+		logrus.Info("gRPC server stopped gracefully")
+	case <-time.After(30 * time.Second):
+		logrus.Warn("Forcing gRPC server shutdown")
+		grpcServer.Stop()
+	}
+
+	if streamProcessor != nil {
+		streamProcessor.Close()
+	}
+
+	logrus.Info("NLP Processing Service shutdown complete")
 }
 
-func setupLogging() {
-	level := viper.GetString("logging.level")
-	format := viper.GetString("logging.format")
+func initConfig() error {
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath("./config")
+	viper.AddConfigPath(".")
 
-	logLevel, err := logrus.ParseLevel(level)
-	if err != nil {
-		logLevel = logrus.InfoLevel
+	// Set defaults
+	viper.SetDefault("server.port", 4002)
+	viper.SetDefault("grpc.port", 50052)
+	viper.SetDefault("grpc.max_receive_message_size", 4194304) // 4MB
+	viper.SetDefault("grpc.max_send_message_size", 4194304)
+	viper.SetDefault("processing.worker_count", 3)
+	viper.SetDefault("processing.batch_size", 50)
+	viper.SetDefault("redis.host", "localhost")
+	viper.SetDefault("redis.port", 6379)
+	viper.SetDefault("redis.database", 1)
+
+	if err := viper.ReadInConfig(); err != nil {
+		logrus.Warnf("Config file not found, using defaults: %v", err)
 	}
-	logrus.SetLevel(logLevel)
 
-	if format == "json" {
+	return nil
+}
+
+func initLogger() {
+	level := viper.GetString("logging.level")
+	switch level {
+	case "debug":
+		logrus.SetLevel(logrus.DebugLevel)
+	case "info":
+		logrus.SetLevel(logrus.InfoLevel)
+	case "warn":
+		logrus.SetLevel(logrus.WarnLevel)
+	case "error":
+		logrus.SetLevel(logrus.ErrorLevel)
+	default:
+		logrus.SetLevel(logrus.InfoLevel)
+	}
+
+	if viper.GetString("logging.format") == "json" {
 		logrus.SetFormatter(&logrus.JSONFormatter{})
 	} else {
 		logrus.SetFormatter(&logrus.TextFormatter{
 			FullTimestamp: true,
+			DisableColors: false,
 		})
 	}
 }
 
-func initializeDatabase() (*database.Database, error) {
+func initDatabase() (*database.Database, error) {
 	dbConfig := database.Config{
 		Host:            viper.GetString("database.postgres.host"),
 		Port:            viper.GetInt("database.postgres.port"),
@@ -164,104 +223,35 @@ func initializeDatabase() (*database.Database, error) {
 		return nil, err
 	}
 
-	// Run migrations
-	if err := db.AutoMigrate(); err != nil {
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
-	}
-
-	// Create indexes
-	if err := db.CreateIndexes(); err != nil {
-		logrus.WithError(err).Warn("Failed to create some indexes")
-	}
-
-	// Create materialized views
-	if err := db.CreateMaterializedViews(); err != nil {
-		logrus.WithError(err).Warn("Failed to create materialized views")
-	}
-
+	logrus.Info("Database connected successfully")
 	return db, nil
 }
 
-func initializeRedis() *redis.Client {
+func initRedis() *redis.Client {
 	return redis.NewClient(&redis.Options{
-		Addr:         fmt.Sprintf("%s:%d", viper.GetString("redis.host"), viper.GetInt("redis.port")),
-		Password:     viper.GetString("redis.password"),
-		DB:           viper.GetInt("redis.database"),
-		PoolSize:     viper.GetInt("redis.pool_size"),
-		MinIdleConns: viper.GetInt("redis.min_idle_conns"),
+		Addr:     fmt.Sprintf("%s:%d", viper.GetString("redis.host"), viper.GetInt("redis.port")),
+		Password: viper.GetString("redis.password"),
+		DB:       viper.GetInt("redis.database"),
 	})
 }
 
-func initializeSentimentService() service.SentimentService {
-	config := service.SentimentConfig{
-		ModelPath: viper.GetString("models.finbert.model_path"),
-		Device:    viper.GetString("models.finbert.device"),
-		BatchSize: viper.GetInt("models.finbert.batch_size"),
-		MaxLength: viper.GetInt("models.finbert.max_length"),
+func initStreamProcessor(nlpService service.NLPProcessingService) (*service.StreamProcessor, error) {
+	newsIngestionEndpoint := viper.GetString("external_services.news_ingestion_service.grpc_endpoint")
+	if newsIngestionEndpoint == "" {
+		newsIngestionEndpoint = "localhost:50051"
 	}
-	return service.NewSentimentService(config)
-}
 
-func initializeNERService() service.NERService {
-	config := service.NERConfig{
-		ModelPath:           viper.GetString("models.ner.model_path"),
-		SpacyModel:          viper.GetString("models.ner.spacy_model"),
-		ConfidenceThreshold: float32(viper.GetFloat64("models.ner.confidence_threshold")),
+	config := service.StreamProcessorConfig{
+		NewsIngestionEndpoint: newsIngestionEndpoint,
+		WorkerCount:           viper.GetInt("processing.worker_count"),
+		BatchSize:             int32(viper.GetInt("processing.batch_size")),
 	}
-	return service.NewNERService(config)
-}
 
-func initializeTopicService() service.TopicService {
-	config := service.TopicConfig{
-		ModelPath:  viper.GetString("models.topic_classifier.model_path"),
-		Categories: viper.GetStringSlice("models.topic_classifier.categories"),
-	}
-	return service.NewTopicService(config)
-}
-
-func startGRPCServer(
-	nlpService service.NLPProcessingService,
-	analysisRepo repository.AnalysisRepository,
-	articleRepo repository.ArticleRepository,
-	sourceRepo repository.SourceRepository,
-	processingLogRepo repository.ProcessingLogRepository,
-) *grpc.Server {
-	port := viper.GetInt("grpc.port")
-
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	processor, err := service.NewStreamProcessor(config, nlpService)
 	if err != nil {
-		logrus.Fatalf("Failed to listen: %v", err)
+		return nil, fmt.Errorf("failed to create stream processor: %w", err)
 	}
 
-	grpcServer := grpc.NewServer(
-		grpc.MaxRecvMsgSize(viper.GetInt("grpc.max_receive_message_size")),
-		grpc.MaxSendMsgSize(viper.GetInt("grpc.max_send_message_size")),
-	)
-
-	// Register NLP handler
-	nlpHandler := handler.NewNLPGRPCHandler(nlpService, analysisRepo)
-	nlpv1.RegisterNLPProcessingServiceServer(grpcServer, nlpHandler)
-
-	go func() {
-		logrus.Infof("🌐 gRPC server listening on port %d", port)
-		if err := grpcServer.Serve(lis); err != nil {
-			logrus.Fatalf("Failed to serve gRPC: %v", err)
-		}
-	}()
-
-	return grpcServer
-}
-
-func waitForShutdown(cancelProcessor context.CancelFunc) {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	<-sigChan
-	logrus.Info("Shutdown signal received, stopping gracefully...")
-
-	// Cancel stream processor
-	cancelProcessor()
-
-	// Give it some time to finish
-	time.Sleep(5 * time.Second)
+	logrus.Info("Stream processor initialized successfully")
+	return processor, nil
 }
