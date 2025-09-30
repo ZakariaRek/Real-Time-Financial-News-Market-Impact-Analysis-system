@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
@@ -26,6 +27,48 @@ import (
 	newsv1 "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion/proto/services/news-ingestion/proto/gen"
 )
 
+// ServiceContainer holds all initialized services
+type ServiceContainer struct {
+	// Repositories
+	articleRepo   repository.ArticleRepository
+	sourceRepo    repository.SourceRepository
+	logRepo       repository.ProcessingLogRepository
+	rateLimitRepo repository.RateLimitRepository
+
+	// Services
+	deduplicationService service.DeduplicationService
+	extractionService    *service.DataExtractionService
+	ingestionService     service.IngestionService
+
+	// Handlers
+	httpHandler *handler.HTTPHandler
+	grpcHandler *handler.GRPCHandler
+
+	// Clients
+	newsAPIClient client.NewsAPIClient
+	rssClient     client.RSSClient
+	twitterClient client.TwitterClient
+
+	// Database
+	db *database.Database
+
+	// Background Jobs
+	cronScheduler *cron.Cron
+}
+
+// Metrics holds service metrics
+type Metrics struct {
+	ArticlesIngested  int64
+	ArticlesProcessed int64
+	Errors            int64
+	LastIngestion     time.Time
+	mu                sync.RWMutex
+}
+
+var (
+	serviceMetrics = &Metrics{}
+)
+
 func main() {
 	// Initialize configuration
 	if err := initConfig(); err != nil {
@@ -35,25 +78,106 @@ func main() {
 	// Initialize logger
 	initLogger()
 
-	logrus.Info("Starting News Ingestion Service...")
+	logrus.Info("========================================")
+	logrus.Info("   News Ingestion Service Starting")
+	logrus.Info("========================================")
 
-	// Initialize database connection with retries
+	// Initialize service container
+	container, err := initializeServices()
+	if err != nil {
+		logrus.Fatalf("Failed to initialize services: %v", err)
+	}
+	defer container.cleanup()
+
+	// Setup servers
+	httpPort := viper.GetInt("server.port")
+	if httpPort == 0 {
+		httpPort = 4001
+	}
+
+	grpcPort := viper.GetInt("server.grpc_port")
+	if grpcPort == 0 {
+		grpcPort = 4002
+	}
+
+	httpServer := setupHTTPServer(container.httpHandler, httpPort, container.db)
+	grpcServer := setupGRPCServer(container.grpcHandler, grpcPort)
+
+	// Start background jobs
+	if viper.GetBool("processing.enable_auto_ingestion") {
+		logrus.Info("Starting background ingestion jobs...")
+		container.startBackgroundJobs()
+	} else {
+		logrus.Info("Auto-ingestion disabled. Use manual triggers.")
+	}
+
+	// Start servers
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start HTTP server
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		startHTTPServer(httpServer, httpPort)
+	}()
+
+	// Start gRPC server
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		startGRPCServer(grpcServer, grpcPort)
+	}()
+
+	// Start metrics reporter
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		reportMetricsPeriodically(ctx)
+	}()
+
+	logrus.Info("========================================")
+	logrus.Info("   All Services Running Successfully")
+	logrus.Info("========================================")
+	logrus.Infof("   HTTP Server:  http://localhost:%d", httpPort)
+	logrus.Infof("   gRPC Server:  localhost:%d", grpcPort)
+	logrus.Infof("   Health Check: http://localhost:%d/health", httpPort)
+	logrus.Info("========================================")
+	logrus.Info("   Press Ctrl+C to shutdown")
+	logrus.Info("========================================")
+
+	// Wait for shutdown signal
+	gracefulShutdown(httpServer, grpcServer, container, cancel)
+
+	wg.Wait()
+	logrus.Info("All services stopped gracefully")
+}
+
+// initializeServices initializes all services and dependencies
+func initializeServices() (*ServiceContainer, error) {
+	logrus.Info("Initializing services...")
+
+	// Initialize database
 	db, err := initDatabase()
 	if err != nil {
-		logrus.Fatalf("Failed to initialize database: %v", err)
+		return nil, fmt.Errorf("database initialization failed: %w", err)
 	}
-	defer db.Close()
 
-	logrus.Info("Database connection established successfully")
+	logrus.Info("✓ Database connection established")
 
-	// Run database migrations
+	// Run migrations
 	if err := runMigrations(db); err != nil {
-		logrus.Fatalf("Failed to run migrations: %v", err)
+		return nil, fmt.Errorf("migration failed: %w", err)
 	}
 
-	// Create additional indexes for performance
+	logrus.Info("✓ Database migrations completed")
+
+	// Create indexes
 	if err := db.CreateIndexes(); err != nil {
-		logrus.Warnf("Failed to create some indexes: %v", err)
+		logrus.Warnf("Some indexes failed to create: %v", err)
+	} else {
+		logrus.Info("✓ Database indexes created")
 	}
 
 	// Initialize repositories
@@ -62,7 +186,9 @@ func main() {
 	logRepo := repository.NewProcessingLogRepository(db.DB)
 	rateLimitRepo := repository.NewRateLimitRepository(db.DB)
 
-	// Initialize clients
+	logrus.Info("✓ Repositories initialized")
+
+	// Initialize external clients
 	newsAPIClient := client.NewNewsAPIClient(
 		viper.GetString("news_sources.newsapi.api_key"),
 		viper.GetString("news_sources.newsapi.base_url"),
@@ -75,8 +201,16 @@ func main() {
 		viper.GetString("news_sources.twitter.base_url"),
 	)
 
-	// Initialize services
+	logrus.Info("✓ External API clients initialized")
+
+	// Initialize core services
 	deduplicationService := service.NewDeduplicationService(articleRepo)
+
+	extractionService := service.NewDataExtractionService(
+		articleRepo,
+		sourceRepo,
+		deduplicationService,
+	)
 
 	ingestionService := service.NewIngestionService(
 		articleRepo,
@@ -89,82 +223,132 @@ func main() {
 		twitterClient,
 	)
 
+	logrus.Info("✓ Core services initialized")
+
 	// Initialize handlers
 	httpHandler := handler.NewHTTPHandler(ingestionService, articleRepo, sourceRepo)
 	grpcHandler := handler.NewGRPCHandler(ingestionService, articleRepo, sourceRepo, logRepo)
 
-	// Setup HTTP server
-	httpPort := viper.GetInt("server.port")
-	if httpPort == 0 {
-		httpPort = 4001 // Default HTTP port
+	logrus.Info("✓ Handlers initialized")
+
+	// Initialize cron scheduler
+	cronScheduler := cron.New(cron.WithSeconds())
+
+	logrus.Info("✓ Cron scheduler initialized")
+
+	return &ServiceContainer{
+		articleRepo:          articleRepo,
+		sourceRepo:           sourceRepo,
+		logRepo:              logRepo,
+		rateLimitRepo:        rateLimitRepo,
+		deduplicationService: deduplicationService,
+		extractionService:    extractionService,
+		ingestionService:     ingestionService,
+		httpHandler:          httpHandler,
+		grpcHandler:          grpcHandler,
+		newsAPIClient:        newsAPIClient,
+		rssClient:            rssClient,
+		twitterClient:        twitterClient,
+		db:                   db,
+		cronScheduler:        cronScheduler,
+	}, nil
+}
+
+// startBackgroundJobs starts scheduled ingestion jobs
+func (c *ServiceContainer) startBackgroundJobs() {
+	ctx := context.Background()
+
+	// RSS Feed Ingestion - Every 5 minutes
+	rssSchedule := viper.GetString("processing.rss_schedule")
+	if rssSchedule == "" {
+		rssSchedule = "*/5 * * * *" // Default: every 5 minutes
 	}
 
-	// Setup gRPC server
-	grpcPort := viper.GetInt("server.grpc_port")
-	if grpcPort == 0 {
-		grpcPort = 4002 // Default gRPC port
+	_, err := c.cronScheduler.AddFunc(rssSchedule, func() {
+		logrus.Info("Starting scheduled RSS ingestion...")
+		startTime := time.Now()
+
+		if err := c.ingestionService.IngestFromRSS(ctx); err != nil {
+			logrus.WithError(err).Error("Scheduled RSS ingestion failed")
+			incrementErrorMetric()
+		} else {
+			duration := time.Since(startTime)
+			logrus.Infof("✓ RSS ingestion completed in %v", duration)
+			updateIngestionMetrics()
+		}
+	})
+
+	if err != nil {
+		logrus.WithError(err).Error("Failed to schedule RSS ingestion")
+	} else {
+		logrus.Infof("✓ Scheduled RSS ingestion: %s", rssSchedule)
 	}
 
-	// Create HTTP server
-	httpServer := setupHTTPServer(httpHandler, httpPort)
-
-	// Create gRPC server
-	grpcServer := setupGRPCServer(grpcHandler, grpcPort)
-
-	// Start servers concurrently
-	var wg sync.WaitGroup
-
-	// Start HTTP server
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		logrus.Infof("Starting HTTP server on port %d", httpPort)
-		logrus.Infof("Health check available at: http://localhost:%d/health", httpPort)
-		logrus.Infof("Database status available at: http://localhost:%d/db/status", httpPort)
-
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logrus.Fatalf("HTTP server failed to start: %v", err)
-		}
-	}()
-
-	// Start gRPC server
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
-		if err != nil {
-			logrus.Fatalf("Failed to listen on gRPC port %d: %v", grpcPort, err)
-		}
-
-		logrus.Infof("Starting gRPC server on port %d", grpcPort)
-		logrus.Infof("gRPC reflection enabled for development")
-
-		if err := grpcServer.Serve(lis); err != nil {
-			logrus.Fatalf("gRPC server failed to start: %v", err)
-		}
-	}()
-
-	logrus.Info("All services started successfully! Press Ctrl+C to shutdown...")
-
-	// Wait for interrupt signal to gracefully shutdown the servers
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	logrus.Info("Shutting down servers...")
-
-	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Shutdown HTTP server
-	if err := httpServer.Shutdown(ctx); err != nil {
-		logrus.Errorf("HTTP server forced to shutdown: %v", err)
+	// NewsAPI Ingestion - Every 15 minutes
+	newsAPISchedule := viper.GetString("processing.newsapi_schedule")
+	if newsAPISchedule == "" {
+		newsAPISchedule = "*/15 * * * *" // Default: every 15 minutes
 	}
 
-	// Shutdown gRPC server
-	grpcServer.GracefulStop()
+	_, err = c.cronScheduler.AddFunc(newsAPISchedule, func() {
+		logrus.Info("Starting scheduled NewsAPI ingestion...")
+		startTime := time.Now()
 
-	logrus.Info("All servers exited")
+		if err := c.ingestionService.IngestFromNewsAPI(ctx); err != nil {
+			logrus.WithError(err).Error("Scheduled NewsAPI ingestion failed")
+			incrementErrorMetric()
+		} else {
+			duration := time.Since(startTime)
+			logrus.Infof("✓ NewsAPI ingestion completed in %v", duration)
+			updateIngestionMetrics()
+		}
+	})
+
+	if err != nil {
+		logrus.WithError(err).Error("Failed to schedule NewsAPI ingestion")
+	} else {
+		logrus.Infof("✓ Scheduled NewsAPI ingestion: %s", newsAPISchedule)
+	}
+
+	// Rate limit cleanup - Daily at midnight
+	_, err = c.cronScheduler.AddFunc("0 0 * * *", func() {
+		logrus.Info("Starting rate limit cleanup...")
+		cutoff := time.Now().AddDate(0, 0, -7) // Remove records older than 7 days
+
+		if err := c.rateLimitRepo.CleanupOldRecords(ctx, cutoff); err != nil {
+			logrus.WithError(err).Error("Rate limit cleanup failed")
+		} else {
+			logrus.Info("✓ Rate limit cleanup completed")
+		}
+	})
+
+	if err != nil {
+		logrus.WithError(err).Error("Failed to schedule rate limit cleanup")
+	} else {
+		logrus.Info("✓ Scheduled rate limit cleanup: daily at midnight")
+	}
+
+	// Start the scheduler
+	c.cronScheduler.Start()
+	logrus.Info("✓ Background jobs started successfully")
+}
+
+// cleanup performs cleanup operations
+func (c *ServiceContainer) cleanup() {
+	logrus.Info("Cleaning up resources...")
+
+	if c.cronScheduler != nil {
+		c.cronScheduler.Stop()
+		logrus.Info("✓ Stopped cron scheduler")
+	}
+
+	if c.db != nil {
+		if err := c.db.Close(); err != nil {
+			logrus.WithError(err).Error("Failed to close database connection")
+		} else {
+			logrus.Info("✓ Closed database connection")
+		}
+	}
 }
 
 func initDatabase() (*database.Database, error) {
@@ -184,41 +368,33 @@ func initDatabase() (*database.Database, error) {
 	var db *database.Database
 	var err error
 
-	// Retry connection up to 5 times
+	// Retry connection with exponential backoff
 	maxRetries := 5
 	for i := 0; i < maxRetries; i++ {
 		db, err = database.NewConnection(dbConfig)
 		if err == nil {
-			break
+			return db, nil
 		}
 
 		if i < maxRetries-1 {
-			logrus.Warnf("Failed to connect to database (attempt %d/%d): %v", i+1, maxRetries, err)
-			time.Sleep(time.Duration(i+1) * 2 * time.Second) // Exponential backoff
+			waitTime := time.Duration(i+1) * 2 * time.Second
+			logrus.Warnf("Failed to connect to database (attempt %d/%d): %v. Retrying in %v...",
+				i+1, maxRetries, err, waitTime)
+			time.Sleep(waitTime)
 		}
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
-	}
-
-	return db, nil
+	return nil, fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
 }
 
 func runMigrations(db *database.Database) error {
-	logrus.Info("Running database migrations...")
-
-	// Run migrations with better error handling
 	if err := db.AutoMigrate(); err != nil {
 		return fmt.Errorf("migration failed: %w", err)
 	}
-
-	logrus.Info("Database migrations completed successfully")
 	return nil
 }
 
-func setupHTTPServer(httpHandler *handler.HTTPHandler, port int) *http.Server {
-	// Setup Gin router
+func setupHTTPServer(httpHandler *handler.HTTPHandler, port int, db *database.Database) *http.Server {
 	if viper.GetString("server.environment") == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -226,25 +402,48 @@ func setupHTTPServer(httpHandler *handler.HTTPHandler, port int) *http.Server {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+	router.Use(corsMiddleware())
 
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "healthy",
 			"service":   "news-ingestion",
+			"version":   "1.0.0",
 			"timestamp": time.Now().UTC(),
-			"database":  "connected",
+			"database":  getDatabaseStatus(db),
 			"servers": gin.H{
 				"http": "running",
 				"grpc": "running",
 			},
+			"metrics": getMetrics(),
 		})
 	})
 
-	// Basic database status endpoint
+	// Readiness probe
+	router.GET("/ready", func(c *gin.Context) {
+		if getDatabaseStatus(db) == "connected" {
+			c.JSON(http.StatusOK, gin.H{"status": "ready"})
+		} else {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not ready"})
+		}
+	})
+
+	// Liveness probe
+	router.GET("/live", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "alive"})
+	})
+
+	// Metrics endpoint
+	router.GET("/metrics", func(c *gin.Context) {
+		c.JSON(http.StatusOK, getMetrics())
+	})
+
+	// Database status
 	router.GET("/db/status", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status": "connected",
+			"status":    getDatabaseStatus(db),
+			"timestamp": time.Now().UTC(),
 		})
 	})
 
@@ -278,68 +477,230 @@ func setupHTTPServer(httpHandler *handler.HTTPHandler, port int) *http.Server {
 	}
 
 	return &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: router,
+		Addr:           fmt.Sprintf(":%d", port),
+		Handler:        router,
+		ReadTimeout:    15 * time.Second,
+		WriteTimeout:   15 * time.Second,
+		IdleTimeout:    60 * time.Second,
+		MaxHeaderBytes: 1 << 20, // 1MB
 	}
 }
 
 func setupGRPCServer(grpcHandler *handler.GRPCHandler, port int) *grpc.Server {
-	// Create gRPC server with options
 	opts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(1024 * 1024 * 4), // 4MB
 		grpc.MaxSendMsgSize(1024 * 1024 * 4), // 4MB
+		grpc.ConnectionTimeout(30 * time.Second),
 	}
 
 	grpcServer := grpc.NewServer(opts...)
-
-	// Register the NewsService with the gRPC server
 	newsv1.RegisterNewsServiceServer(grpcServer, grpcHandler)
 
-	logrus.Info("NewsService registered with gRPC server")
-
-	// Enable reflection for development (allows tools like grpcui and Postman to discover services)
-	reflection.Register(grpcServer)
-	logrus.Info("gRPC reflection enabled")
+	// Enable reflection for development
+	if viper.GetString("server.environment") != "production" {
+		reflection.Register(grpcServer)
+	}
 
 	return grpcServer
 }
+
+func startHTTPServer(server *http.Server, port int) {
+	logrus.Infof("Starting HTTP server on port %d", port)
+	logrus.Infof("  → Health:  http://localhost:%d/health", port)
+	logrus.Infof("  → Ready:   http://localhost:%d/ready", port)
+	logrus.Infof("  → Metrics: http://localhost:%d/metrics", port)
+	logrus.Infof("  → API:     http://localhost:%d/api/v1", port)
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logrus.Fatalf("HTTP server failed: %v", err)
+	}
+}
+
+func startGRPCServer(server *grpc.Server, port int) {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		logrus.Fatalf("Failed to listen on gRPC port %d: %v", port, err)
+	}
+
+	logrus.Infof("Starting gRPC server on port %d", port)
+	logrus.Infof("  → Address: localhost:%d", port)
+	logrus.Infof("  → Reflection: enabled")
+
+	if err := server.Serve(lis); err != nil {
+		logrus.Fatalf("gRPC server failed: %v", err)
+	}
+}
+
+func gracefulShutdown(httpServer *http.Server, grpcServer *grpc.Server, container *ServiceContainer, cancel context.CancelFunc) {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	logrus.Info("========================================")
+	logrus.Info("   Shutdown signal received")
+	logrus.Info("========================================")
+
+	ctx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	// Cancel background jobs
+	cancel()
+
+	// Shutdown HTTP server
+	logrus.Info("Shutting down HTTP server...")
+	if err := httpServer.Shutdown(ctx); err != nil {
+		logrus.Errorf("HTTP server shutdown error: %v", err)
+	} else {
+		logrus.Info("✓ HTTP server stopped")
+	}
+
+	// Shutdown gRPC server
+	logrus.Info("Shutting down gRPC server...")
+	grpcServer.GracefulStop()
+	logrus.Info("✓ gRPC server stopped")
+
+	// Cleanup resources
+	container.cleanup()
+}
+
+func reportMetricsPeriodically(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			metrics := getMetrics()
+			logrus.WithFields(logrus.Fields{
+				"articles_ingested":  metrics["articles_ingested"],
+				"articles_processed": metrics["articles_processed"],
+				"errors":             metrics["errors"],
+				"last_ingestion":     metrics["last_ingestion"],
+			}).Info("Service metrics report")
+		}
+	}
+}
+
+func corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	}
+}
+
+func getDatabaseStatus(db *database.Database) string {
+	if db == nil {
+		return "disconnected"
+	}
+
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		return "error"
+	}
+
+	if err := sqlDB.Ping(); err != nil {
+		return "unhealthy"
+	}
+
+	return "connected"
+}
+
+func getMetrics() map[string]interface{} {
+	serviceMetrics.mu.RLock()
+	defer serviceMetrics.mu.RUnlock()
+
+	return map[string]interface{}{
+		"articles_ingested":  serviceMetrics.ArticlesIngested,
+		"articles_processed": serviceMetrics.ArticlesProcessed,
+		"errors":             serviceMetrics.Errors,
+		"last_ingestion":     serviceMetrics.LastIngestion.Format(time.RFC3339),
+		"uptime":             time.Since(startTime).String(),
+	}
+}
+
+func updateIngestionMetrics() {
+	serviceMetrics.mu.Lock()
+	defer serviceMetrics.mu.Unlock()
+	serviceMetrics.ArticlesIngested++
+	serviceMetrics.LastIngestion = time.Now()
+}
+
+func incrementErrorMetric() {
+	serviceMetrics.mu.Lock()
+	defer serviceMetrics.mu.Unlock()
+	serviceMetrics.Errors++
+}
+
+var startTime = time.Now()
 
 func initConfig() error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("./config")
 	viper.AddConfigPath(".")
-	viper.AddConfigPath("./")
 
-	// Set default values
+	// Server defaults
 	viper.SetDefault("server.port", 4001)
 	viper.SetDefault("server.grpc_port", 4002)
 	viper.SetDefault("server.environment", "development")
+
+	// Database defaults
 	viper.SetDefault("database.postgres.host", "localhost")
 	viper.SetDefault("database.postgres.port", 5432)
 	viper.SetDefault("database.postgres.database", "news_ingestion")
 	viper.SetDefault("database.postgres.username", "postgres")
-	viper.SetDefault("database.postgres.password", "yahyasd56")
+	viper.SetDefault("database.postgres.password", "zakaria")
 	viper.SetDefault("database.postgres.ssl_mode", "disable")
 	viper.SetDefault("database.postgres.max_open_conns", 25)
 	viper.SetDefault("database.postgres.max_idle_conns", 5)
 	viper.SetDefault("database.postgres.conn_max_lifetime", "5m")
 	viper.SetDefault("database.postgres.conn_max_idle_time", "1m")
+
+	// Logging defaults
 	viper.SetDefault("logging.level", "info")
 	viper.SetDefault("logging.format", "text")
+
+	// Processing defaults
+	viper.SetDefault("processing.enable_auto_ingestion", true)
+	viper.SetDefault("processing.rss_schedule", "*/5 * * * *")
+	viper.SetDefault("processing.newsapi_schedule", "*/15 * * * *")
+	viper.SetDefault("processing.batch_size", 100)
+	viper.SetDefault("processing.worker_count", 5)
+
+	// News sources defaults
 	viper.SetDefault("news_sources.newsapi.api_key", "")
 	viper.SetDefault("news_sources.newsapi.base_url", "https://newsapi.org/v2")
 	viper.SetDefault("news_sources.twitter.bearer_token", "")
 	viper.SetDefault("news_sources.twitter.base_url", "https://api.twitter.com/2")
 
-	// Read environment variables with prefix
+	// Redis defaults
+	viper.SetDefault("redis.host", "localhost")
+	viper.SetDefault("redis.port", 6379)
+	viper.SetDefault("redis.database", 0)
+	viper.SetDefault("redis.password", "")
+
 	viper.SetEnvPrefix("NEWS")
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		logrus.Warnf("Config file not found, using defaults: %v", err)
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			logrus.Warn("Config file not found, using defaults")
+		} else {
+			return fmt.Errorf("error reading config file: %w", err)
+		}
 	} else {
-		logrus.Infof("Using config file: %s", viper.ConfigFileUsed())
+		logrus.Infof("Loaded config file: %s", viper.ConfigFileUsed())
 	}
 
 	return nil
@@ -362,11 +723,16 @@ func initLogger() {
 
 	format := viper.GetString("logging.format")
 	if format == "json" {
-		logrus.SetFormatter(&logrus.JSONFormatter{})
+		logrus.SetFormatter(&logrus.JSONFormatter{
+			TimestampFormat: time.RFC3339,
+		})
 	} else {
 		logrus.SetFormatter(&logrus.TextFormatter{
-			DisableColors: false,
-			FullTimestamp: true,
+			DisableColors:   false,
+			FullTimestamp:   true,
+			TimestampFormat: "2006-01-02 15:04:05",
 		})
 	}
+
+	logrus.SetOutput(os.Stdout)
 }
