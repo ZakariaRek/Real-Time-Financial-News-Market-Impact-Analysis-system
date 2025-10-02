@@ -170,14 +170,14 @@ public class NLPServiceClient {
                 .build();
     }
 
-    public boolean isConnected() {
-        try {
-            var healthStub = io.grpc.health.v1.HealthGrpc.newBlockingStub(channel);
-            var request = io.grpc.health.v1.HealthCheckRequest.newBuilder().build();
-            healthStub.check(request);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-}
+  public boolean isConnected() {
+      try {
+          var healthStub = io.grpc.health.v1.HealthGrpc.newBlockingStub(channel);
+          var request = io.grpc.health.v1.HealthCheckRequest.newBuilder().build();
+          healthStub.check(request);
+          return true;
+      } catch (Exception e) {
+          return false;
+      }
+  }
+  }
