@@ -239,4 +239,129 @@ public class MarketImpactPredictionService {
                 .filter(prediction -> prediction != null)
                 .toList();
     }
+    // services/MarketImpact/src/main/java/com/market_impact/MarketImpact/Services/MarketImpactPredictionService.java
+// Add this new method to the existing service:
+
+    /**
+     * Generate market prediction from sentiment trends (without article ID)
+     */
+    public MarketPrediction generatePredictionFromSentimentTrends(
+            String symbol, List<SentimentTrendData> trends) {
+
+        log.info("Generating market prediction from sentiment trends for symbol: {}", symbol);
+
+        if (trends == null || trends.isEmpty()) {
+            throw new RuntimeException("No sentiment trends available for symbol: " + symbol);
+        }
+
+        // Calculate prediction metrics from trends
+        BigDecimal predictedChange = calculatePredictedChangeFromTrends(trends);
+        String direction = determineDirection(predictedChange);
+        BigDecimal confidence = calculateConfidenceFromTrends(trends);
+        BigDecimal impactScore = calculateImpactScoreFromTrends(trends);
+
+        // Create and save prediction
+        MarketPrediction prediction = MarketPrediction.builder()
+                .articleId(null) // No specific article, based on aggregate sentiment
+                .symbol(symbol)
+                .predictedChangePercent(predictedChange)
+                .direction(direction)
+                .confidence(confidence)
+                .impactScore(impactScore)
+                .modelType("SENTIMENT_TREND_v1.0")
+                .predictionTimestamp(LocalDateTime.now())
+                .build();
+
+        MarketPrediction savedPrediction = marketPredictionRepository.save(prediction);
+        log.info("Market prediction saved: {}", savedPrediction.getId());
+
+        return savedPrediction;
+    }
+
+    /**
+     * Calculate predicted change from sentiment trends
+     */
+    private BigDecimal calculatePredictedChangeFromTrends(List<SentimentTrendData> trends) {
+        // Get recent sentiment average (last 30 minutes)
+        double recentSentiment = trends.stream()
+                .limit(6)
+                .mapToDouble(SentimentTrendData::getAvgSentiment)
+                .average()
+                .orElse(0.0);
+
+        // Calculate momentum
+        double momentum = calculateTrendAdjustment(trends);
+
+        // Base prediction
+        double basePrediction = recentSentiment * BASE_IMPACT_MULTIPLIER;
+
+        // Apply momentum
+        double totalPrediction = basePrediction * (1 + momentum);
+
+        // Cap at realistic bounds
+        totalPrediction = Math.max(-10.0, Math.min(10.0, totalPrediction));
+
+        return BigDecimal.valueOf(totalPrediction).setScale(4, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Calculate confidence from trends
+     */
+    private BigDecimal calculateConfidenceFromTrends(List<SentimentTrendData> trends) {
+        // Calculate consistency of sentiment
+        double avgSentiment = trends.stream()
+                .mapToDouble(SentimentTrendData::getAvgSentiment)
+                .average()
+                .orElse(0.0);
+
+        double variance = trends.stream()
+                .mapToDouble(t -> Math.pow(t.getAvgSentiment() - avgSentiment, 2))
+                .average()
+                .orElse(0.0);
+
+        double stdDev = Math.sqrt(variance);
+
+        // Lower standard deviation = higher consistency = higher confidence
+        double consistency = Math.max(0.0, 1.0 - stdDev);
+
+        // Article volume factor
+        long totalArticles = trends.stream()
+                .mapToLong(SentimentTrendData::getArticleCount)
+                .sum();
+        double volumeFactor = Math.min(1.0, totalArticles / 20.0);
+
+        // Combined confidence
+        double confidence = (consistency * 0.6) + (volumeFactor * 0.4);
+
+        return BigDecimal.valueOf(confidence).setScale(4, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Calculate impact score from trends
+     */
+    private BigDecimal calculateImpactScoreFromTrends(List<SentimentTrendData> trends) {
+        double avgSentiment = trends.stream()
+                .mapToDouble(SentimentTrendData::getAvgSentiment)
+                .average()
+                .orElse(0.0);
+
+        double sentimentMagnitude = Math.abs(avgSentiment);
+
+        // Article volume
+        long totalArticles = trends.stream()
+                .mapToLong(SentimentTrendData::getArticleCount)
+                .sum();
+        double volumeFactor = Math.min(1.0, totalArticles / 30.0);
+
+        // Volatility (higher volatility = higher potential impact)
+        double avgVolatility = trends.stream()
+                .mapToDouble(SentimentTrendData::getVolatility)
+                .average()
+                .orElse(0.0);
+
+        double impact = (sentimentMagnitude * 50) * (1 + volumeFactor + avgVolatility);
+        impact = Math.min(100.0, impact);
+
+        return BigDecimal.valueOf(impact).setScale(4, RoundingMode.HALF_UP);
+    }
 }
