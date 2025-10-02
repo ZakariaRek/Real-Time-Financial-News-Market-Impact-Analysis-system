@@ -30,42 +30,24 @@ logging:
   level: info
   format: json
 
-models:
-  finbert:
-    model_path: "./models/finbert/model.bin"
-    device: "cpu"  # or "cuda" for GPU
-    batch_size: 32
-    max_length: 512
-
-  ner:
-    model_path: "./models/ner/model.bin"
-    spacy_model: "en_core_web_sm"
-    confidence_threshold: 0.7
-
-  topic_classifier:
-    model_path: "./models/topic/classifier.bin"
-    categories:
-      - "Market Analysis"
-      - "Earnings"
-      - "Mergers & Acquisitions"
-      - "Economic Indicators"
-      - "Regulatory News"
-      - "Company News"
-      - "Crypto"
-      - "Commodities"
 
 processing:
   batch_size: 50
   worker_count: 3
   retry_attempts: 3
   timeout_seconds: 60
+  enable_auto_ingestion: true
+  sentiment_trigger_threshold: 10  # Trigger when >= 10 pending articles
+  rss_schedule: "0 */2 * * * *"
+  newsapi_schedule: "0 */7 * * * *"
 
 grpc:
   port: 50052
   max_receive_message_size: 4194304  # 4MB
   max_send_message_size: 4194304
 
-  # 4MB
+# services/news-ingestion/config/config.yaml
+
 
 external_services:
   news_ingestion_service:
