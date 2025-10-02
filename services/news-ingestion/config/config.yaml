@@ -1,239 +1,105 @@
 # services/news-ingestion/config/config.yaml
-# News Ingestion Service Configuration
-
 server:
-  port: 4001                    # HTTP server port
-  grpc_port: 4002               # gRPC server port
-  environment: development      # development | production | staging
+  port: 4001
+  grpc_port: 4002
+  environment: development
 
 database:
-  # PostgreSQL Configuration
   postgres:
     host: localhost
     port: 5432
     database: news_ingestion
     username: postgres
-    password: yahyasd56          # Use environment variable in production: ${DB_PASSWORD}
+    password: yahyasd56
+    ssl_mode: disable
+    max_open_conns: 25
+    max_idle_conns: 5
+    conn_max_lifetime: 5m
+    conn_max_idle_time: 1m
 
-    # Connection Pool Settings (optimized for AWS RDS)
-    ssl_mode: disable           # For production: require
-    max_open_conns: 25          # Maximum number of open connections
-    max_idle_conns: 5           # Maximum number of idle connections
-    conn_max_lifetime: 5m       # Maximum amount of time a connection may be reused
-    conn_max_idle_time: 1m      # Maximum amount of time a connection may be idle
-
-# Redis Configuration (for caching and rate limiting)
 redis:
   host: localhost
   port: 6379
   database: 0
-  password: ""                  # Use environment variable in production
-  pool_size: 10
-  min_idle_conns: 5
+  password: ""
 
-# Logging Configuration
 logging:
-  level: info                   # debug | info | warn | error
-  format: text                  # text | json
-  output: stdout                # stdout | file
-  file_path: logs/news-ingestion.log
+  level: info
+  format: text
 
-# Rate Limiting
-rate_limiting:
-  default_requests_per_minute: 60
-  burst_size: 10
-  cleanup_interval: 24h         # How often to clean up old rate limit records
+processing:
+  enable_auto_ingestion: true
 
-# News Sources Configuration
+  # Sentiment Analysis Trigger
+  sentiment_trigger_threshold: 10  # Trigger when >= 10 pending articles
+
+  # Cron Schedules
+  rss_schedule: "0 */2 * * * *"        # Every 2 minutes
+  newsapi_schedule: "0 */7 * * * *"    # Every 7 minutes
+  cleanup_schedule: "0 0 0 * * *"      # Daily at midnight
+
+  batch_size: 100
+  worker_count: 5
+  retry_attempts: 3
+  timeout_seconds: 30
+
+# services/news-ingestion/config/config.yaml
+
 news_sources:
-  # NewsAPI Configuration
   newsapi:
-    api_key: ""                 # Get from https://newsapi.org/
+    api_key: ""
     base_url: "https://newsapi.org/v2"
     enabled: true
-    rate_limit: 100             # Requests per day for free tier
-    queries:
-      - "financial news"
-      - "stock market"
-      - "nasdaq"
-      - "dow jones"
-      - "earnings report"
-      - "merger acquisition"
-      - "ipo"
 
-  # Twitter API Configuration
   twitter:
-    bearer_token: ""            # Get from Twitter Developer Portal
+    bearer_token: ""
     base_url: "https://api.twitter.com/2"
-    enabled: false              # Set to true when token is configured
-    rate_limit: 450             # Requests per 15 minutes
-    financial_accounts:         # Twitter accounts to monitor
-      - "business"
-      - "markets"
-      - "FinancialTimes"
-      - "WSJ"
-      - "Bloomberg"
+    enabled: false
 
-  # RSS Feeds Configuration
+  # ✅ Updated RSS Feeds with Working URLs
   rss_feeds:
-    - name: "Reuters Business"
-      url: "https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best"
+    - name: "Reuters World News"
+      url: "https://www.reutersagency.com/feed/?best-topics=political-general&post_type=best"
       enabled: true
 
-    - name: "Bloomberg Markets"
-      url: "https://feeds.bloomberg.com/markets/news.rss"
+    - name: "Reuters Business"
+      url: "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best"
+      enabled: true
+
+    - name: "BBC News - Business"
+      url: "http://feeds.bbci.co.uk/news/business/rss.xml"
       enabled: true
 
     - name: "Financial Times"
-      url: "https://www.ft.com/?format=rss"
+      url: "https://www.ft.com/rss/home"
       enabled: true
 
-    - name: "Wall Street Journal"
-      url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"
-      enabled: true
-
-    - name: "CNBC"
+    - name: "CNBC Top News"
       url: "https://www.cnbc.com/id/100003114/device/rss/rss.html"
       enabled: true
 
-    - name: "MarketWatch"
+    - name: "MarketWatch Top Stories"
       url: "https://feeds.marketwatch.com/marketwatch/topstories/"
       enabled: true
 
-# Processing Configuration
-processing:
-  # Auto Ingestion
-  enable_auto_ingestion: true   # Enable scheduled background jobs
+    - name: "Yahoo Finance"
+      url: "https://finance.yahoo.com/news/rssindex"
+      enabled: true
 
-  # Cron Schedules (6 fields: second minute hour day month weekday)
-  rss_schedule: "0 */2 * * * *"        # Every 2 minutes (was: */2 * * * *)
-  newsapi_schedule: "0 */7 * * * *"    # Every 7 minutes (was: */7 * * * *)
-  twitter_schedule: "0 */5 * * * *"    # Every 5 minutes
-  cleanup_schedule: "0 0 0 * * *"      # Daily at midnight (was: 0 0 * * *)* *"       # Daily at midnight
+    - name: "Seeking Alpha Market News"
+      url: "https://seekingalpha.com/feed.xml"
+      enabled: true
 
-  # Processing Settings
-  batch_size: 100               # Number of articles to process in one batch
-  worker_count: 5               # Number of concurrent workers
-  retry_attempts: 3             # Number of retries for failed operations
-  retry_delay: 5s               # Delay between retries
-  timeout_seconds: 30           # Operation timeout
+    - name: "The Wall Street Journal - World News"
+      url: "https://feeds.a.dj.com/rss/RSSWorldNews.xml"
+      enabled: true
 
-  # Deduplication Settings
-  deduplication:
-    enabled: true
-    similarity_threshold: 0.85  # 85% similarity to consider duplicate
-    lookback_days: 7            # How far back to check for duplicates
-
-  # Content Validation
-  validation:
-    min_content_length: 100     # Minimum content length in characters
-    max_content_length: 50000   # Maximum content length in characters
-    min_word_count: 10          # Minimum number of words
-    required_fields:
-      - title
-      - url
-      - published_at
-
-# Extraction Configuration
-extraction:
-  # Symbol Extraction
-  symbols:
-    enabled: true
-    major_symbols:              # Prioritize these symbols
-      - AAPL
-      - GOOGL
-      - MSFT
-      - AMZN
-      - TSLA
-      - META
-      - NVDA
-    extract_from_text: true     # Extract $SYMBOL from content
-
-  # Keyword Extraction
-  keywords:
-    enabled: true
-    max_keywords: 10            # Maximum keywords per article
-    min_relevance_score: 0.6    # Minimum relevance score to include
-
-  # Category Classification
-  categories:
-    enabled: true
-    categories:
-      - earnings
-      - merger_acquisition
-      - ipo
-      - market
-      - regulatory
-      - technology
-      - energy
-      - healthcare
-      - finance
-      - general
-
-  # Summary Generation
-  summary:
-    enabled: true
-    max_length: 200             # Maximum summary length in characters
-
-# Monitoring & Metrics
-monitoring:
-  enabled: true
-  metrics_port: 9090            # Prometheus metrics port
-  health_check_interval: 30s
-
-  # Alert Thresholds
-  alerts:
-    error_rate_threshold: 0.05  # Alert if error rate > 5%
-    processing_time_threshold: 5s
-    queue_size_threshold: 1000
-
-# Feature Flags
-features:
-  enable_twitter: false         # Requires Twitter API credentials
-  enable_web_scraping: false    # Advanced web scraping
-  enable_sentiment_analysis: false  # Real-time sentiment (CPU intensive)
-  enable_metrics: true
-  enable_profiling: false       # Performance profiling
-  enable_debug_endpoints: true  # Debug API endpoints
-
-# Performance Tuning
-performance:
-  # HTTP Server
-  http_read_timeout: 15s
-  http_write_timeout: 15s
-  http_idle_timeout: 60s
-  http_max_header_bytes: 1048576  # 1MB
-
-  # gRPC Server
-  grpc_max_recv_msg_size: 4194304   # 4MB
-  grpc_max_send_msg_size: 4194304   # 4MB
-  grpc_connection_timeout: 30s
-  grpc_keepalive_time: 30s
-  grpc_keepalive_timeout: 10s
-
-  # Database
-  db_query_timeout: 10s
-  db_slow_query_threshold: 1s
-
-# Development Settings
-development:
-  enable_sql_logging: false
-  enable_request_logging: true
-  enable_cors: true
-  cors_origins:
-    - "*"
-  mock_external_apis: false     # Use mock data for testing
-
-# Production Settings (override in production environment)
-production:
-  enable_sql_logging: false
-  enable_request_logging: false
-  enable_cors: false
-  mock_external_apis: false
-
-  # Security
-  require_api_key: true
-  enable_rate_limiting: true
-  enable_tls: true
-  tls_cert_file: /etc/ssl/certs/server.crt
-  tls_key_file: /etc/ssl/private/server.key
+    - name: "Bloomberg Markets"
+      url: "https://www.bloomberg.com/feed/podcast/etf-report.xml"
+      enabled: false  # Often requires authentication
+# External Services
+external_services:
+  nlp_service:
+    grpc_endpoint: "localhost:50052"
+    timeout: "30s"
+    max_retry: 3
