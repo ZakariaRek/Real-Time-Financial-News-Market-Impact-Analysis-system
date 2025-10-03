@@ -5,9 +5,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/alertsignal_db
     username: postgres
-#    password: yahyasd56
     password: zakaria
-
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
@@ -27,7 +25,20 @@ spring:
         type:
           preferred_uuid_jdbc_type: CHAR
 
+  # Redis Configuration for caching active signals
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 8
+          min-idle: 2
 
+  # gRPC Server Configuration
   grpc:
     server:
       port: 9090
@@ -41,15 +52,35 @@ spring:
       max-connection-age-grace: 5s
       permit-keep-alive-time: 10s
       permit-keep-alive-without-calls: false
-      # Enable reflection for debugging tools
       reflection:
         enabled: true
+
+# External Services Configuration
+external:
+  services:
+    market-impact:
+      host: localhost
+      port: 9090
+      timeout: 30s
+
+# Application-specific Configuration
+app:
+  signals:
+    # High confidence threshold for signal generation
+    high-confidence-threshold: 0.8
+    # Minimum impact score for signal generation
+    min-impact-score: 50.0
+    # Signal cache TTL in hours
+    cache-ttl-hours: 24
+    # WebSocket update interval in milliseconds
+    websocket-update-interval: 5000
 
 logging:
   level:
     com.alert_signals.AlertSignal: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    io.grpc: INFO
 
 server:
   port: 8081
@@ -60,7 +91,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true

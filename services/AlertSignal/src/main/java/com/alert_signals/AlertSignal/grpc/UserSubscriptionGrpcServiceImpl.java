@@ -2,7 +2,24 @@ package com.alert_signals.AlertSignal.grpc;
 
 import com.alert_signals.AlertSignal.entity.UserSubscription;
 import com.alert_signals.AlertSignal.service.UserSubscriptionService;
-import com.alert_signals.AlertSignal.grpc.generated.*;
+import com.alert_signals.AlertSignal.grpc.generated.UserSubscriptionGrpcServiceGrpc;
+import com.alert_signals.AlertSignal.grpc.generated.CreateSubscriptionRequest;
+import com.alert_signals.AlertSignal.grpc.generated.SubscriptionResponse;
+import com.alert_signals.AlertSignal.grpc.generated.GetSubscriptionRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetSubscriptionByNameRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetSubscriptionsByUserIdRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetActiveSubscriptionsRequest;
+
+import com.alert_signals.AlertSignal.grpc.generated.GetActiveSubscriptionsBySymbolRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetActiveSubscriptionsBySignalTypeRequest;
+import com.alert_signals.AlertSignal.grpc.generated.UpdateSubscriptionRequest;
+import com.alert_signals.AlertSignal.grpc.generated.DeactivateSubscriptionRequest;
+import com.alert_signals.AlertSignal.grpc.generated.DeactivateSubscriptionResponse;
+import com.alert_signals.AlertSignal.grpc.generated.DeleteSubscriptionRequest;
+import com.alert_signals.AlertSignal.grpc.generated.DeleteSubscriptionResponse;
+import com.alert_signals.AlertSignal.grpc.generated.SubscriptionListResponse;
+
+
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;

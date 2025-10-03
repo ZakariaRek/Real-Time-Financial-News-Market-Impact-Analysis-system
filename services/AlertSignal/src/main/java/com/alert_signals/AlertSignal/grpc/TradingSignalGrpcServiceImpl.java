@@ -2,7 +2,17 @@ package com.alert_signals.AlertSignal.grpc;
 
 import com.alert_signals.AlertSignal.entity.TradingSignal;
 import com.alert_signals.AlertSignal.service.TradingSignalService;
-import com.alert_signals.AlertSignal.grpc.generated.*;
+import com.alert_signals.AlertSignal.grpc.generated.CreateSignalRequest;
+import com.alert_signals.AlertSignal.grpc.generated.DeleteSignalRequest;
+import com.alert_signals.AlertSignal.grpc.generated.DeleteSignalResponse;
+import com.alert_signals.AlertSignal.grpc.generated.GetSignalRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetSignalsByDateRangeRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetSignalsByStatusRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetSignalsBySymbolRequest;
+import com.alert_signals.AlertSignal.grpc.generated.SignalListResponse;
+import com.alert_signals.AlertSignal.grpc.generated.SignalResponse;
+import com.alert_signals.AlertSignal.grpc.generated.UpdateSignalRequest;
+
 import com.google.protobuf.Timestamp;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -21,7 +31,7 @@ import java.util.stream.Collectors;
 @GrpcService
 @RequiredArgsConstructor
 @Slf4j
-public class TradingSignalGrpcServiceImpl extends TradingSignalGrpcServiceGrpc.TradingSignalGrpcServiceImplBase {
+public class TradingSignalGrpcServiceImpl extends com.alert_signals.AlertSignal.grpc.generated.TradingSignalGrpcServiceGrpc.TradingSignalGrpcServiceImplBase {
 
     private final TradingSignalService tradingSignalService;
 
