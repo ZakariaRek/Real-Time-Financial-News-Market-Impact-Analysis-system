@@ -2,7 +2,23 @@ package com.alert_signals.AlertSignal.grpc;
 
 import com.alert_signals.AlertSignal.entity.AlertDeliveryLog;
 import com.alert_signals.AlertSignal.service.AlertDeliveryService;
-import com.alert_signals.AlertSignal.grpc.generated.*;
+import com.alert_signals.AlertSignal.grpc.generated.AlertDeliveryGrpcServiceGrpc;
+import com.alert_signals.AlertSignal.grpc.generated.AverageLatencyResponse;
+import com.alert_signals.AlertSignal.grpc.generated.DeliveryCountResponse;
+import com.alert_signals.AlertSignal.grpc.generated.DeliveryLogListResponse;
+import com.alert_signals.AlertSignal.grpc.generated.DeliveryLogResponse;
+import com.alert_signals.AlertSignal.grpc.generated.GetAverageDeliveryLatencyRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetDeliveryLogRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetDeliveryLogsByMethodRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetDeliveryLogsBySignalIdRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetDeliveryLogsByStatusRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetDeliveryLogsBySubscriptionIdRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetDeliveryLogsByDateRangeRequest;
+import com.alert_signals.AlertSignal.grpc.generated.GetSuccessfulDeliveryCountRequest;
+import com.alert_signals.AlertSignal.grpc.generated.UpdateDeliveryLogRequest;
+
+
+
 import com.google.protobuf.Timestamp;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -25,7 +41,7 @@ public class AlertDeliveryGrpcServiceImpl extends AlertDeliveryGrpcServiceGrpc.A
     private final AlertDeliveryService alertDeliveryService;
 
     @Override
-    public void logDelivery(LogDeliveryRequest request, StreamObserver<DeliveryLogResponse> responseObserver) {
+    public void logDelivery(com.alert_signals.AlertSignal.grpc.generated.LogDeliveryRequest request, StreamObserver<DeliveryLogResponse> responseObserver) {
         try {
             AlertDeliveryLog deliveryLog = AlertDeliveryLog.builder()
                     .signalId(UUID.fromString(request.getSignalId()))

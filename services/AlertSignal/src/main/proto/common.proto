@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package com.alert_signals;
+
+option java_package = "com.alert_signals.AlertSignal.grpc.generated";
+option java_outer_classname = "CommonProto";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+
+// Common messages
+message Decimal {
+  string value = 1;
+}
+
+message UUID {
+  string value = 1;
+}
+
+// Direction enum
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  UP = 1;
+  DOWN = 2;
+  NEUTRAL = 3;
+}
+
+// Risk Level enum
+enum RiskLevel {
+  RISK_LEVEL_UNSPECIFIED = 0;
+  LOW = 1;
+  MEDIUM = 2;
+  HIGH = 3;
+  CRITICAL = 4;
+}

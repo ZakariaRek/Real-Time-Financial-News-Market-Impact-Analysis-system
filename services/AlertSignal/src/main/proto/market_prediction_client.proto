@@ -1,0 +1,52 @@
+syntax = "proto3";
+package com.alert_signals;
+option java_package = "com.alert_signals.AlertSignal.grpc.generated";
+option java_outer_classname = "MarketPredictionClientProto";
+option java_multiple_files = true;
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+
+message MarketPrediction {
+  UUID id = 1;
+  UUID article_id = 2;
+  string symbol = 3;
+  Decimal predicted_change_percent = 4;
+  Direction direction = 5;
+  Decimal confidence = 6;
+  Decimal impact_score = 7;
+  string model_type = 8;
+  google.protobuf.Timestamp prediction_timestamp = 9;
+  repeated RiskMetrics risk_metrics = 10;
+}
+
+message RiskMetrics {
+  UUID id = 1;
+  UUID prediction_id = 2;
+  string symbol = 3;
+  Decimal var_95_1day = 4;
+  Decimal historical_volatility_30d = 5;
+  Decimal market_correlation = 6;
+  RiskLevel risk_level = 7;
+}
+
+message GetMarketPredictionRequest {
+  UUID id = 1;
+}
+
+message GetMarketPredictionResponse {
+  MarketPrediction prediction = 1;
+}
+
+message GetLatestPredictionRequest {
+  string symbol = 1;
+}
+
+message GetLatestPredictionResponse {
+  MarketPrediction prediction = 1;
+}
+
+service MarketPredictionService {
+  rpc GetPrediction(GetMarketPredictionRequest) returns (GetMarketPredictionResponse);
+  rpc GetLatestPrediction(GetLatestPredictionRequest) returns (GetLatestPredictionResponse);
+}
