@@ -118,7 +118,59 @@ server:
   http2:
     enabled: true
 
+external:
+  services:
+    nlp-processing:
+      host: localhost
+      port: 50052
+      timeout: 30s
 
+    news-ingestion:
+      host: localhost
+      port: 4002
+      timeout: 30s
+
+
+
+  task:
+    scheduling:
+      pool:
+        size: 5
+    execution:
+      pool:
+        core-size: 10
+        max-size: 20
+        queue-capacity: 100
+
+market-impact:
+  sp500:
+    symbols:
+      - AAPL
+      - MSFT
+      - GOOGL
+      - AMZN
+      - NVDA
+      - META
+      - TSLA
+      - BRK.B
+      - UNH
+      - XOM
+      - JPM
+      - V
+      - JNJ
+      - WMT
+      - PG
+      # Add more as needed
+    batch-size: 10
+    max-concurrent: 5
+
+  prediction:
+    confidence-threshold: 0.7
+    batch-size: 100
+    sentiment-weight: 0.6
+    trend-weight: 0.4
+
+# Market Impact Configuration
 
 logging:
   level:

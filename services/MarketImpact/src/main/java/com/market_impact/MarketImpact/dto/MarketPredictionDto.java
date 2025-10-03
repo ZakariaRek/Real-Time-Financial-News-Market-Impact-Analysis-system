@@ -45,7 +45,7 @@ public class MarketPredictionDto {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class Request {
-        @NotNull(message = "Article ID is required")
+
         private UUID articleId;
 
         @NotBlank(message = "Symbol is required")

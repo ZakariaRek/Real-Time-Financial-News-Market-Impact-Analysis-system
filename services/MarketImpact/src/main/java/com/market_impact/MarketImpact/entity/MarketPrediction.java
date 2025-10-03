@@ -27,8 +27,7 @@ public class MarketPrediction {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "article_id", nullable = false)
-    @NotNull
+    @Column(name = "article_id", nullable = true)
     private UUID articleId;
 
     @Column(name = "symbol", nullable = false, length = 20)

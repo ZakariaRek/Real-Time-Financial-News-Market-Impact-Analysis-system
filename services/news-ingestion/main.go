@@ -36,9 +36,10 @@ type ServiceContainer struct {
 	rateLimitRepo repository.RateLimitRepository
 
 	// Services
-	deduplicationService service.DeduplicationService
-	extractionService    *service.DataExtractionService
-	ingestionService     service.IngestionService
+	deduplicationService    service.DeduplicationService
+	extractionService       *service.DataExtractionService
+	ingestionService        service.IngestionService
+	sentimentTriggerService *service.SentimentTriggerService
 
 	// Handlers
 	httpHandler *handler.HTTPHandler
@@ -48,6 +49,7 @@ type ServiceContainer struct {
 	newsAPIClient client.NewsAPIClient
 	rssClient     client.RSSClient
 	twitterClient client.TwitterClient
+	nlpClient     client.NLPProcessingClient
 
 	// Database
 	db *database.Database
@@ -67,6 +69,7 @@ type Metrics struct {
 
 var (
 	serviceMetrics = &Metrics{}
+	startTime      = time.Now()
 )
 
 func main() {
@@ -143,6 +146,11 @@ func main() {
 	logrus.Infof("   HTTP Server:  http://localhost:%d", httpPort)
 	logrus.Infof("   gRPC Server:  localhost:%d", grpcPort)
 	logrus.Infof("   Health Check: http://localhost:%d/health", httpPort)
+	if container.sentimentTriggerService != nil {
+		logrus.Infof("   Sentiment Trigger: ENABLED (threshold: %d)", viper.GetInt("processing.sentiment_trigger_threshold"))
+	} else {
+		logrus.Info("   Sentiment Trigger: DISABLED")
+	}
 	logrus.Info("========================================")
 	logrus.Info("   Press Ctrl+C to shutdown")
 	logrus.Info("========================================")
@@ -170,15 +178,16 @@ func initializeServices() (*ServiceContainer, error) {
 	if err := runMigrations(db); err != nil {
 		return nil, fmt.Errorf("migration failed: %w", err)
 	}
-	// Seed initial data
 
 	logrus.Info("✓ Database migrations completed")
-	// Seed initial data - ADD THIS SECTION
+
+	// Seed initial data
 	if err := db.SeedData(context.Background()); err != nil {
 		logrus.WithError(err).Warn("Failed to seed database, continuing anyway")
 	} else {
 		logrus.Info("✓ Database seeding completed")
 	}
+
 	// Create indexes
 	if err := db.CreateIndexes(); err != nil {
 		logrus.Warnf("Some indexes failed to create: %v", err)
@@ -209,6 +218,20 @@ func initializeServices() (*ServiceContainer, error) {
 
 	logrus.Info("✓ External API clients initialized")
 
+	// Initialize NLP client
+	nlpEndpoint := viper.GetString("external_services.nlp_service.grpc_endpoint")
+	if nlpEndpoint == "" {
+		nlpEndpoint = "localhost:50052"
+	}
+
+	nlpClient, err := client.NewNLPProcessingClient(nlpEndpoint)
+	if err != nil {
+		logrus.WithError(err).Warn("⚠️ Failed to connect to NLP service, sentiment trigger will be disabled")
+		nlpClient = nil
+	} else {
+		logrus.Info("✓ NLP client initialized")
+	}
+
 	// Initialize core services
 	deduplicationService := service.NewDeduplicationService(articleRepo)
 
@@ -231,6 +254,22 @@ func initializeServices() (*ServiceContainer, error) {
 
 	logrus.Info("✓ Core services initialized")
 
+	// Initialize sentiment trigger service (if NLP client is available)
+	var sentimentTriggerService *service.SentimentTriggerService
+	if nlpClient != nil {
+		threshold := viper.GetInt("processing.sentiment_trigger_threshold")
+		if threshold == 0 {
+			threshold = 10 // Default threshold
+		}
+
+		sentimentTriggerService = service.NewSentimentTriggerService(
+			articleRepo,
+			nlpClient,
+			threshold,
+		)
+		logrus.Infof("✓ Sentiment trigger service initialized (threshold: %d articles)", threshold)
+	}
+
 	// Initialize handlers
 	httpHandler := handler.NewHTTPHandler(ingestionService, articleRepo, sourceRepo)
 	grpcHandler := handler.NewGRPCHandler(ingestionService, articleRepo, sourceRepo, logRepo)
@@ -243,20 +282,22 @@ func initializeServices() (*ServiceContainer, error) {
 	logrus.Info("✓ Cron scheduler initialized")
 
 	return &ServiceContainer{
-		articleRepo:          articleRepo,
-		sourceRepo:           sourceRepo,
-		logRepo:              logRepo,
-		rateLimitRepo:        rateLimitRepo,
-		deduplicationService: deduplicationService,
-		extractionService:    extractionService,
-		ingestionService:     ingestionService,
-		httpHandler:          httpHandler,
-		grpcHandler:          grpcHandler,
-		newsAPIClient:        newsAPIClient,
-		rssClient:            rssClient,
-		twitterClient:        twitterClient,
-		db:                   db,
-		cronScheduler:        cronScheduler,
+		articleRepo:             articleRepo,
+		sourceRepo:              sourceRepo,
+		logRepo:                 logRepo,
+		rateLimitRepo:           rateLimitRepo,
+		deduplicationService:    deduplicationService,
+		extractionService:       extractionService,
+		ingestionService:        ingestionService,
+		sentimentTriggerService: sentimentTriggerService,
+		httpHandler:             httpHandler,
+		grpcHandler:             grpcHandler,
+		newsAPIClient:           newsAPIClient,
+		rssClient:               rssClient,
+		twitterClient:           twitterClient,
+		nlpClient:               nlpClient,
+		db:                      db,
+		cronScheduler:           cronScheduler,
 	}, nil
 }
 
@@ -264,22 +305,22 @@ func initializeServices() (*ServiceContainer, error) {
 func (c *ServiceContainer) startBackgroundJobs() {
 	ctx := context.Background()
 
-	// RSS Feed Ingestion - Every 5 minutes
+	// RSS Feed Ingestion
 	rssSchedule := viper.GetString("processing.rss_schedule")
 	if rssSchedule == "" {
-		rssSchedule = "*/5 * * * *" // Default: every 5 minutes
+		rssSchedule = "0 */2 * * * *" // Default: every 2 minutes
 	}
 
 	_, err := c.cronScheduler.AddFunc(rssSchedule, func() {
-		logrus.Info("Starting scheduled RSS ingestion...")
+		logrus.Info("🔄 Starting scheduled RSS ingestion...")
 		startTime := time.Now()
 
 		if err := c.ingestionService.IngestFromRSS(ctx); err != nil {
-			logrus.WithError(err).Error("Scheduled RSS ingestion failed")
+			logrus.WithError(err).Error("❌ Scheduled RSS ingestion failed")
 			incrementErrorMetric()
 		} else {
 			duration := time.Since(startTime)
-			logrus.Infof("✓ RSS ingestion completed in %v", duration)
+			logrus.Infof("✅ RSS ingestion completed in %v", duration)
 			updateIngestionMetrics()
 		}
 	})
@@ -290,22 +331,22 @@ func (c *ServiceContainer) startBackgroundJobs() {
 		logrus.Infof("✓ Scheduled RSS ingestion: %s", rssSchedule)
 	}
 
-	// NewsAPI Ingestion - Every 15 minutes
+	// NewsAPI Ingestion
 	newsAPISchedule := viper.GetString("processing.newsapi_schedule")
 	if newsAPISchedule == "" {
-		newsAPISchedule = "*/15 * * * *" // Default: every 15 minutes
+		newsAPISchedule = "0 */7 * * * *" // Default: every 7 minutes
 	}
 
 	_, err = c.cronScheduler.AddFunc(newsAPISchedule, func() {
-		logrus.Info("Starting scheduled NewsAPI ingestion...")
+		logrus.Info("🔄 Starting scheduled NewsAPI ingestion...")
 		startTime := time.Now()
 
 		if err := c.ingestionService.IngestFromNewsAPI(ctx); err != nil {
-			logrus.WithError(err).Error("Scheduled NewsAPI ingestion failed")
+			logrus.WithError(err).Error("❌ Scheduled NewsAPI ingestion failed")
 			incrementErrorMetric()
 		} else {
 			duration := time.Since(startTime)
-			logrus.Infof("✓ NewsAPI ingestion completed in %v", duration)
+			logrus.Infof("✅ NewsAPI ingestion completed in %v", duration)
 			updateIngestionMetrics()
 		}
 	})
@@ -317,35 +358,57 @@ func (c *ServiceContainer) startBackgroundJobs() {
 	}
 
 	// Rate limit cleanup - Daily at midnight
-	_, err = c.cronScheduler.AddFunc("0 0 * * *", func() {
-		logrus.Info("Starting rate limit cleanup...")
+	cleanupSchedule := viper.GetString("processing.cleanup_schedule")
+	if cleanupSchedule == "" {
+		cleanupSchedule = "0 0 0 * * *"
+	}
+
+	_, err = c.cronScheduler.AddFunc(cleanupSchedule, func() {
+		logrus.Info("🧹 Starting rate limit cleanup...")
 		cutoff := time.Now().AddDate(0, 0, -7) // Remove records older than 7 days
 
 		if err := c.rateLimitRepo.CleanupOldRecords(ctx, cutoff); err != nil {
-			logrus.WithError(err).Error("Rate limit cleanup failed")
+			logrus.WithError(err).Error("❌ Rate limit cleanup failed")
 		} else {
-			logrus.Info("✓ Rate limit cleanup completed")
+			logrus.Info("✅ Rate limit cleanup completed")
 		}
 	})
 
 	if err != nil {
 		logrus.WithError(err).Error("Failed to schedule rate limit cleanup")
 	} else {
-		logrus.Info("✓ Scheduled rate limit cleanup: daily at midnight")
+		logrus.Infof("✓ Scheduled rate limit cleanup: %s", cleanupSchedule)
 	}
 
 	// Start the scheduler
 	c.cronScheduler.Start()
 	logrus.Info("✓ Background jobs started successfully")
+
+	// Start sentiment trigger service (if available)
+	if c.sentimentTriggerService != nil {
+		go func() {
+			logrus.Info("🚀 Starting sentiment trigger service...")
+			c.sentimentTriggerService.Start(ctx)
+		}()
+		logrus.Info("✓ Sentiment trigger service started")
+	}
 }
 
 // cleanup performs cleanup operations
 func (c *ServiceContainer) cleanup() {
-	logrus.Info("Cleaning up resources...")
+	logrus.Info("🧹 Cleaning up resources...")
 
 	if c.cronScheduler != nil {
 		c.cronScheduler.Stop()
 		logrus.Info("✓ Stopped cron scheduler")
+	}
+
+	if c.nlpClient != nil {
+		if err := c.nlpClient.Close(); err != nil {
+			logrus.WithError(err).Error("Failed to close NLP client")
+		} else {
+			logrus.Info("✓ Closed NLP client connection")
+		}
 	}
 
 	if c.db != nil {
@@ -399,6 +462,7 @@ func runMigrations(db *database.Database) error {
 	}
 	return nil
 }
+
 func setupHTTPServer(httpHandler *handler.HTTPHandler, port int, db *database.Database, ingestionService service.IngestionService) *http.Server {
 	if viper.GetString("server.environment") == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -476,53 +540,49 @@ func setupHTTPServer(httpHandler *handler.HTTPHandler, port int, db *database.Da
 		// Ingestion routes
 		ingestion := v1.Group("/ingestion")
 		{
-			//ingestion.POST("/trigger", httpHandler.TriggerManualIngestion)
-			//ingestion.GET("/status", httpHandler.GetIngestionStatus)
 			ingestion.POST("/trigger", httpHandler.TriggerManualIngestion)
 			ingestion.GET("/status", httpHandler.GetIngestionStatus)
-			//ingestion.POST("/trigger/rss", httpHandler.TriggerRSSIngestion)
-			//ingestion.POST("/trigger/newsapi", httpHandler.TriggerNewsAPIIngestion)
+
+			// Manual RSS trigger
+			ingestion.POST("/trigger/rss", func(c *gin.Context) {
+				logrus.Info("📰 Manual RSS ingestion triggered via HTTP")
+				ctx := context.Background()
+
+				if err := ingestionService.IngestFromRSS(ctx); err != nil {
+					logrus.WithError(err).Error("❌ Manual RSS ingestion failed")
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error":   err.Error(),
+						"message": "RSS ingestion failed",
+					})
+					return
+				}
+
+				c.JSON(http.StatusOK, gin.H{
+					"message":   "✅ RSS ingestion completed successfully",
+					"timestamp": time.Now().UTC(),
+				})
+			})
+
+			// Manual NewsAPI trigger
+			ingestion.POST("/trigger/newsapi", func(c *gin.Context) {
+				logrus.Info("📡 Manual NewsAPI ingestion triggered via HTTP")
+				ctx := context.Background()
+
+				if err := ingestionService.IngestFromNewsAPI(ctx); err != nil {
+					logrus.WithError(err).Error("❌ Manual NewsAPI ingestion failed")
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error":   err.Error(),
+						"message": "NewsAPI ingestion failed",
+					})
+					return
+				}
+
+				c.JSON(http.StatusOK, gin.H{
+					"message":   "✅ NewsAPI ingestion completed successfully",
+					"timestamp": time.Now().UTC(),
+				})
+			})
 		}
-
-		// Manual RSS trigger
-		ingestion.POST("/trigger/rss", func(c *gin.Context) {
-			logrus.Info("Manual RSS ingestion triggered via HTTP")
-			ctx := context.Background()
-
-			if err := ingestionService.IngestFromRSS(ctx); err != nil {
-				logrus.WithError(err).Error("Manual RSS ingestion failed")
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error":   err.Error(),
-					"message": "RSS ingestion failed",
-				})
-				return
-			}
-
-			c.JSON(http.StatusOK, gin.H{
-				"message":   "RSS ingestion completed successfully",
-				"timestamp": time.Now().UTC(),
-			})
-		})
-
-		// Manual NewsAPI trigger
-		ingestion.POST("/trigger/newsapi", func(c *gin.Context) {
-			logrus.Info("Manual NewsAPI ingestion triggered via HTTP")
-			ctx := context.Background()
-
-			if err := ingestionService.IngestFromNewsAPI(ctx); err != nil {
-				logrus.WithError(err).Error("Manual NewsAPI ingestion failed")
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error":   err.Error(),
-					"message": "NewsAPI ingestion failed",
-				})
-				return
-			}
-
-			c.JSON(http.StatusOK, gin.H{
-				"message":   "NewsAPI ingestion completed successfully",
-				"timestamp": time.Now().UTC(),
-			})
-		})
 	}
 
 	return &http.Server{
@@ -554,7 +614,7 @@ func setupGRPCServer(grpcHandler *handler.GRPCHandler, port int) *grpc.Server {
 }
 
 func startHTTPServer(server *http.Server, port int) {
-	logrus.Infof("Starting HTTP server on port %d", port)
+	logrus.Infof("🌐 Starting HTTP server on port %d", port)
 	logrus.Infof("  → Health:  http://localhost:%d/health", port)
 	logrus.Infof("  → Ready:   http://localhost:%d/ready", port)
 	logrus.Infof("  → Metrics: http://localhost:%d/metrics", port)
@@ -571,7 +631,7 @@ func startGRPCServer(server *grpc.Server, port int) {
 		logrus.Fatalf("Failed to listen on gRPC port %d: %v", port, err)
 	}
 
-	logrus.Infof("Starting gRPC server on port %d", port)
+	logrus.Infof("🔌 Starting gRPC server on port %d", port)
 	logrus.Infof("  → Address: localhost:%d", port)
 	logrus.Infof("  → Reflection: enabled")
 
@@ -627,7 +687,7 @@ func reportMetricsPeriodically(ctx context.Context) {
 				"articles_processed": metrics["articles_processed"],
 				"errors":             metrics["errors"],
 				"last_ingestion":     metrics["last_ingestion"],
-			}).Info("Service metrics report")
+			}).Info("📊 Service metrics report")
 		}
 	}
 }
@@ -691,8 +751,6 @@ func incrementErrorMetric() {
 	serviceMetrics.Errors++
 }
 
-var startTime = time.Now()
-
 func initConfig() error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -709,7 +767,7 @@ func initConfig() error {
 	viper.SetDefault("database.postgres.port", 5432)
 	viper.SetDefault("database.postgres.database", "news_ingestion")
 	viper.SetDefault("database.postgres.username", "postgres")
-	viper.SetDefault("database.postgres.password", "zakaria")
+	viper.SetDefault("database.postgres.password", "yahyasd56")
 	viper.SetDefault("database.postgres.ssl_mode", "disable")
 	viper.SetDefault("database.postgres.max_open_conns", 25)
 	viper.SetDefault("database.postgres.max_idle_conns", 5)
@@ -722,16 +780,23 @@ func initConfig() error {
 
 	// Processing defaults
 	viper.SetDefault("processing.enable_auto_ingestion", true)
-	viper.SetDefault("processing.rss_schedule", "*/5 * * * *")
-	viper.SetDefault("processing.newsapi_schedule", "*/15 * * * *")
+	viper.SetDefault("processing.rss_schedule", "0 */2 * * * *")
+	viper.SetDefault("processing.newsapi_schedule", "0 */7 * * * *")
+	viper.SetDefault("processing.cleanup_schedule", "0 0 0 * * *")
 	viper.SetDefault("processing.batch_size", 100)
 	viper.SetDefault("processing.worker_count", 5)
+	viper.SetDefault("processing.sentiment_trigger_threshold", 10)
 
 	// News sources defaults
 	viper.SetDefault("news_sources.newsapi.api_key", "")
 	viper.SetDefault("news_sources.newsapi.base_url", "https://newsapi.org/v2")
 	viper.SetDefault("news_sources.twitter.bearer_token", "")
 	viper.SetDefault("news_sources.twitter.base_url", "https://api.twitter.com/2")
+
+	// External services
+	viper.SetDefault("external_services.nlp_service.grpc_endpoint", "localhost:50052")
+	viper.SetDefault("external_services.nlp_service.timeout", "30s")
+	viper.SetDefault("external_services.nlp_service.max_retry", 3)
 
 	// Redis defaults
 	viper.SetDefault("redis.host", "localhost")

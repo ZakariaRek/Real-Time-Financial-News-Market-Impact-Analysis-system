@@ -1,0 +1,153 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: nlp-postgres
+    environment:
+      POSTGRES_DB: nlp_processing
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zakaria}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - nlp-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: nlp-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - nlp-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # NLP Processing Service
+  nlp-processing:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nlp-processing-service
+    ports:
+      - "50052:50052"
+    environment:
+      # Database Configuration
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=nlp_processing
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-zakaria}
+
+      # Redis Configuration
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DATABASE=1
+
+      # Service Configuration
+      - SERVER_PORT=4002
+      - GRPC_PORT=50052
+      - SERVER_ENVIRONMENT=${ENVIRONMENT:-development}
+
+      # Processing Configuration
+      - PROCESSING_WORKER_COUNT=3
+      - PROCESSING_BATCH_SIZE=50
+      - PROCESSING_RETRY_ATTEMPTS=3
+      - PROCESSING_TIMEOUT_SECONDS=60
+
+      # External Services
+      - NEWS_INGESTION_ENDPOINT=${NEWS_INGESTION_ENDPOINT:-news-ingestion:50051}
+      - NEWS_INGESTION_TIMEOUT=30s
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+    volumes:
+      - ./config:/root/config
+      - ./models:/root/models
+      - nlp_logs:/root/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - nlp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:50052/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PgAdmin (Optional - for database management)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: nlp-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - nlp-network
+    restart: unless-stopped
+    profiles:
+      - tools
+
+  # Redis Commander (Optional - for Redis management)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: nlp-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - nlp-network
+    restart: unless-stopped
+    profiles:
+      - tools
+
+networks:
+  nlp-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  nlp_logs:
+    driver: local

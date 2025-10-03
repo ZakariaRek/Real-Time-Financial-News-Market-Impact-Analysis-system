@@ -5,7 +5,7 @@ import com.market_impact.MarketImpact.dto.MarketPredictionDto;
 import com.market_impact.MarketImpact.dto.RiskMetricsDto;
 import com.google.protobuf.Empty;
 import com.google.protobuf.Timestamp;
-import com.market_impact.MarketImpact.entity.MarketPrediction;
+// REMOVED: import com.market_impact.MarketImpact.entity.MarketPrediction;
 import com.market_impact.grpc.*;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -34,10 +34,8 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
 
     @Override
     public void createPrediction(CreateMarketPredictionRequest request,
-                                 StreamObserver<MarketPrediction> responseObserver) {
+                                 StreamObserver<com.market_impact.grpc.MarketPrediction> responseObserver) {
         try {
-            // log.info("Creating prediction for symbol: {}", request.getSymbol());
-
             MarketPredictionDto.Request dto = MarketPredictionDto.Request.builder()
                     .articleId(UUID.fromString(request.getArticleId().getValue()))
                     .symbol(request.getSymbol())
@@ -51,14 +49,11 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
                     .build();
 
             MarketPredictionDto.Response response = marketPredictionService.createPrediction(dto);
-            MarketPrediction grpcResponse = mapToMarketPredictionResponse(response);
+            com.market_impact.grpc.MarketPrediction grpcResponse = mapToMarketPredictionResponse(response);
 
             responseObserver.onNext(grpcResponse);
             responseObserver.onCompleted();
-
-            // log.info("Successfully created prediction with ID: {}", response.getId());
         } catch (Exception e) {
-            // log.error("Error creating prediction: {}", e.getMessage(), e);
             responseObserver.onError(Status.INTERNAL
                     .withDescription("Error creating prediction: " + e.getMessage())
                     .asRuntimeException());
@@ -69,8 +64,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
     public void getPrediction(GetMarketPredictionRequest request,
                               StreamObserver<GetMarketPredictionResponse> responseObserver) {
         try {
-            // log.debug("Getting prediction by ID: {}", request.getId().getValue());
-
             UUID predictionId = UUID.fromString(request.getId().getValue());
             Optional<MarketPredictionDto.Response> prediction =
                     marketPredictionService.getPredictionById(predictionId);
@@ -87,7 +80,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
                         .asRuntimeException());
             }
         } catch (Exception e) {
-            // log.error("Error getting prediction: {}", e.getMessage(), e);
             responseObserver.onError(Status.INTERNAL
                     .withDescription("Error getting prediction: " + e.getMessage())
                     .asRuntimeException());
@@ -96,10 +88,8 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
 
     @Override
     public void updatePrediction(UpdateMarketPredictionRequest request,
-                                 StreamObserver<MarketPrediction> responseObserver) {
+                                 StreamObserver<com.market_impact.grpc.MarketPrediction> responseObserver) {
         try {
-            // log.info("Updating prediction with ID: {}", request.getId().getValue());
-
             UUID predictionId = UUID.fromString(request.getId().getValue());
 
             MarketPredictionDto.Request.RequestBuilder builder =
@@ -133,14 +123,11 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
             MarketPredictionDto.Request dto = builder.build();
             MarketPredictionDto.Response response =
                     marketPredictionService.updatePrediction(predictionId, dto);
-            MarketPrediction grpcResponse = mapToMarketPredictionResponse(response);
+            com.market_impact.grpc.MarketPrediction grpcResponse = mapToMarketPredictionResponse(response);
 
             responseObserver.onNext(grpcResponse);
             responseObserver.onCompleted();
-
-            // log.info("Successfully updated prediction with ID: {}", predictionId);
         } catch (Exception e) {
-            // log.error("Error updating prediction: {}", e.getMessage(), e);
             responseObserver.onError(Status.INTERNAL
                     .withDescription("Error updating prediction: " + e.getMessage())
                     .asRuntimeException());
@@ -151,17 +138,12 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
     public void deletePrediction(DeleteMarketPredictionRequest request,
                                  StreamObserver<Empty> responseObserver) {
         try {
-            // log.info("Deleting prediction with ID: {}", request.getId().getValue());
-
             UUID predictionId = UUID.fromString(request.getId().getValue());
             marketPredictionService.deletePrediction(predictionId);
 
             responseObserver.onNext(Empty.getDefaultInstance());
             responseObserver.onCompleted();
-
-            // log.info("Successfully deleted prediction with ID: {}", predictionId);
         } catch (Exception e) {
-            // log.error("Error deleting prediction: {}", e.getMessage(), e);
             responseObserver.onError(Status.INTERNAL
                     .withDescription("Error deleting prediction: " + e.getMessage())
                     .asRuntimeException());
@@ -172,15 +154,13 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
     public void getPredictionsBySymbol(GetPredictionsBySymbolRequest request,
                                        StreamObserver<GetPredictionsBySymbolResponse> responseObserver) {
         try {
-            // log.debug("Getting predictions for symbol: {}", request.getSymbol());
-
             if (request.hasPageRequest()) {
                 // Handle paginated request
                 PageRequest pageRequest = createPageRequest(request.getPageRequest());
                 Page<MarketPredictionDto.Response> pagedPredictions =
                         marketPredictionService.getPredictionsBySymbolPaged(request.getSymbol(), pageRequest);
 
-                List<MarketPrediction> grpcPredictions = pagedPredictions.getContent()
+                List<com.market_impact.grpc.MarketPrediction> grpcPredictions = pagedPredictions.getContent()
                         .stream()
                         .map(this::mapToMarketPredictionResponse)
                         .collect(Collectors.toList());
@@ -198,7 +178,7 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
                 List<MarketPredictionDto.Response> predictions =
                         marketPredictionService.getPredictionsBySymbol(request.getSymbol());
 
-                List<MarketPrediction> grpcPredictions = predictions.stream()
+                List<com.market_impact.grpc.MarketPrediction> grpcPredictions = predictions.stream()
                         .map(this::mapToMarketPredictionResponse)
                         .collect(Collectors.toList());
 
@@ -211,7 +191,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
 
             responseObserver.onCompleted();
         } catch (Exception e) {
-            // log.error("Error getting predictions by symbol: {}", e.getMessage(), e);
             responseObserver.onError(Status.INTERNAL
                     .withDescription("Error getting predictions by symbol: " + e.getMessage())
                     .asRuntimeException());
@@ -222,8 +201,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
     public void getPredictionsSummary(GetPredictionsSummaryRequest request,
                                       StreamObserver<GetPredictionsSummaryResponse> responseObserver) {
         try {
-            // log.debug("Getting predictions summary for symbol: {}", request.getSymbol());
-
             List<MarketPredictionDto.Summary> summaries =
                     marketPredictionService.getPredictionsSummaryBySymbol(request.getSymbol());
 
@@ -238,7 +215,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
             responseObserver.onNext(response);
             responseObserver.onCompleted();
         } catch (Exception e) {
-            // log.error("Error getting predictions summary: {}", e.getMessage(), e);
             responseObserver.onError(Status.INTERNAL
                     .withDescription("Error getting predictions summary: " + e.getMessage())
                     .asRuntimeException());
@@ -249,12 +225,10 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
     public void getRecentPredictions(GetRecentPredictionsRequest request,
                                      StreamObserver<GetRecentPredictionsResponse> responseObserver) {
         try {
-            // log.debug("Getting recent predictions for {} hours", request.getHours());
-
             List<MarketPredictionDto.Response> predictions =
                     marketPredictionService.getRecentPredictions(request.getHours());
 
-            List<MarketPrediction> grpcPredictions = predictions.stream()
+            List<com.market_impact.grpc.MarketPrediction> grpcPredictions = predictions.stream()
                     .map(this::mapToMarketPredictionResponse)
                     .collect(Collectors.toList());
 
@@ -265,7 +239,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
             responseObserver.onNext(response);
             responseObserver.onCompleted();
         } catch (Exception e) {
-            // log.error("Error getting recent predictions: {}", e.getMessage(), e);
             responseObserver.onError(Status.INTERNAL
                     .withDescription("Error getting recent predictions: " + e.getMessage())
                     .asRuntimeException());
@@ -277,12 +250,11 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
                                              StreamObserver<GetHighConfidencePredictionsResponse> responseObserver) {
         try {
             double minConfidence = Double.parseDouble(request.getMinConfidence().getValue());
-            // log.debug("Getting high confidence predictions with min confidence: {}", minConfidence);
 
             List<MarketPredictionDto.Response> predictions =
                     marketPredictionService.getHighConfidencePredictions(minConfidence);
 
-            List<MarketPrediction> grpcPredictions = predictions.stream()
+            List<com.market_impact.grpc.MarketPrediction> grpcPredictions = predictions.stream()
                     .map(this::mapToMarketPredictionResponse)
                     .collect(Collectors.toList());
 
@@ -293,7 +265,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
             responseObserver.onNext(response);
             responseObserver.onCompleted();
         } catch (Exception e) {
-            // log.error("Error getting high confidence predictions: {}", e.getMessage(), e);
             responseObserver.onError(Status.INTERNAL
                     .withDescription("Error getting high confidence predictions: " + e.getMessage())
                     .asRuntimeException());
@@ -304,15 +275,13 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
     public void getPredictionsByTimeRange(GetPredictionsByTimeRangeRequest request,
                                           StreamObserver<GetPredictionsByTimeRangeResponse> responseObserver) {
         try {
-            // log.debug("Getting predictions by time range for symbol: {}", request.getSymbol());
-
             LocalDateTime startTime = toLocalDateTime(request.getTimeRange().getStartTime());
             LocalDateTime endTime = toLocalDateTime(request.getTimeRange().getEndTime());
 
             List<MarketPredictionDto.Response> predictions =
                     marketPredictionService.getPredictionsByTimeRange(request.getSymbol(), startTime, endTime);
 
-            List<MarketPrediction> grpcPredictions = predictions.stream()
+            List<com.market_impact.grpc.MarketPrediction> grpcPredictions = predictions.stream()
                     .map(this::mapToMarketPredictionResponse)
                     .collect(Collectors.toList());
 
@@ -323,7 +292,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
             responseObserver.onNext(response);
             responseObserver.onCompleted();
         } catch (Exception e) {
-            // log.error("Error getting predictions by time range: {}", e.getMessage(), e);
             responseObserver.onError(Status.INTERNAL
                     .withDescription("Error getting predictions by time range: " + e.getMessage())
                     .asRuntimeException());
@@ -334,8 +302,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
     public void getAvailableSymbols(GetAvailableSymbolsRequest request,
                                     StreamObserver<GetAvailableSymbolsResponse> responseObserver) {
         try {
-            // log.debug("Getting available symbols");
-
             List<String> symbols = marketPredictionService.getAvailableSymbols();
 
             GetAvailableSymbolsResponse response = GetAvailableSymbolsResponse.newBuilder()
@@ -345,7 +311,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
             responseObserver.onNext(response);
             responseObserver.onCompleted();
         } catch (Exception e) {
-            // log.error("Error getting available symbols: {}", e.getMessage(), e);
             responseObserver.onError(Status.INTERNAL
                     .withDescription("Error getting available symbols: " + e.getMessage())
                     .asRuntimeException());
@@ -356,8 +321,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
     public void getLatestPrediction(GetLatestPredictionRequest request,
                                     StreamObserver<GetLatestPredictionResponse> responseObserver) {
         try {
-            // log.debug("Getting latest prediction for symbol: {}", request.getSymbol());
-
             Optional<MarketPredictionDto.Response> prediction =
                     marketPredictionService.getLatestPredictionForSymbol(request.getSymbol());
 
@@ -373,7 +336,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
                         .asRuntimeException());
             }
         } catch (Exception e) {
-            // log.error("Error getting latest prediction: {}", e.getMessage(), e);
             responseObserver.onError(Status.INTERNAL
                     .withDescription("Error getting latest prediction: " + e.getMessage())
                     .asRuntimeException());
@@ -382,8 +344,8 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
 
     // Private helper methods for mapping
 
-    private MarketPrediction mapToMarketPredictionResponse(MarketPredictionDto.Response dto) {
-        MarketPrediction.Builder builder = MarketPrediction.newBuilder()
+    private com.market_impact.grpc.MarketPrediction mapToMarketPredictionResponse(MarketPredictionDto.Response dto) {
+        com.market_impact.grpc.MarketPrediction.Builder builder = com.market_impact.grpc.MarketPrediction.newBuilder()
                 .setId(createGrpcUUID(dto.getId()))
                 .setArticleId(createGrpcUUID(dto.getArticleId()))
                 .setSymbol(dto.getSymbol())
@@ -433,8 +395,8 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
                 .setId(createGrpcUUID(dto.getId()))
                 .setPredictionId(createGrpcUUID(dto.getPredictionId()))
                 .setSymbol(dto.getSymbol())
-                .setVar951Day(createGrpcDecimal(dto.getVar951day()))  // Fixed: setVar951Day (capital D)
-                .setHistoricalVolatility30D(createGrpcDecimal(dto.getHistoricalVolatility30d()))  // Fixed: setHistoricalVolatility30D (capital D)
+                .setVar951Day(createGrpcDecimal(dto.getVar951day()))
+                .setHistoricalVolatility30D(createGrpcDecimal(dto.getHistoricalVolatility30d()))
                 .setMarketCorrelation(createGrpcDecimal(dto.getMarketCorrelation()))
                 .setRiskLevel(RiskLevel.valueOf(dto.getRiskLevel()));
 
