@@ -1,0 +1,178 @@
+version: '3.8'
+
+services:
+  # ========================================
+  # News Ingestion Service
+  # ========================================
+  news-ingestion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: news-ingestion
+    ports:
+      - "4001:4001"  # HTTP API
+      - "4002:4002"  # gRPC API
+    environment:
+      # Database Configuration
+      - NEWS_DATABASE_POSTGRES_HOST=postgres
+      - NEWS_DATABASE_POSTGRES_PORT=5432
+      - NEWS_DATABASE_POSTGRES_DATABASE=news_ingestion
+      - NEWS_DATABASE_POSTGRES_USERNAME=postgres
+      - NEWS_DATABASE_POSTGRES_PASSWORD=${DB_PASSWORD:-postgres123}
+      - NEWS_DATABASE_POSTGRES_SSL_MODE=disable
+
+      # Server Configuration
+      - NEWS_SERVER_PORT=4001
+      - NEWS_SERVER_GRPC_PORT=4002
+      - NEWS_SERVER_ENVIRONMENT=development
+
+      # API Keys
+      - NEWS_NEWS_SOURCES_NEWSAPI_API_KEY=${NEWSAPI_KEY:-}
+      - NEWS_NEWS_SOURCES_TWITTER_BEARER_TOKEN=${TWITTER_TOKEN:-}
+
+      # Processing Configuration
+      - NEWS_PROCESSING_ENABLE_AUTO_INGESTION=true
+      - NEWS_PROCESSING_SENTIMENT_TRIGGER_THRESHOLD=10
+
+      # External Services
+      - NEWS_EXTERNAL_SERVICES_NLP_SERVICE_GRPC_ENDPOINT=nlp-processing:50052
+
+      # Logging
+      - NEWS_LOGGING_LEVEL=info
+      - NEWS_LOGGING_FORMAT=text
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - financial-news-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ========================================
+  # PostgreSQL Database
+  # ========================================
+  postgres:
+    image: postgres:14-alpine
+    container_name: news-ingestion-db
+    environment:
+      POSTGRES_DB: news_ingestion
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - financial-news-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ========================================
+  # Redis (Optional - for future caching)
+  # ========================================
+  redis:
+    image: redis:7-alpine
+    container_name: news-ingestion-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - financial-news-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    command: redis-server --appendonly yes
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ========================================
+  # pgAdmin (Optional - for database management)
+  # ========================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: news-ingestion-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    networks:
+      - financial-news-network
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+
+  # ========================================
+  # NLP Processing Service (Mock for development)
+  # ========================================
+  nlp-processing:
+    image: alpine:latest
+    container_name: nlp-processing-mock
+    command: tail -f /dev/null
+    networks:
+      - financial-news-network
+    profiles:
+      - full
+
+# ========================================
+# Networks
+# ========================================
+networks:
+  financial-news-network:
+    driver: bridge
+    name: financial-news-network
+
+# ========================================
+# Volumes
+# ========================================
+volumes:
+  postgres_data:
+    driver: local
+    name: news_ingestion_postgres_data
+
+  redis_data:
+    driver: local
+    name: news_ingestion_redis_data
+
+  pgadmin_data:
+    driver: local
+    name: news_ingestion_pgadmin_data
