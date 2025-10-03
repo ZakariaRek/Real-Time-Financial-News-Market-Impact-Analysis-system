@@ -14,6 +14,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/internal/database"
@@ -24,6 +26,7 @@ import (
 )
 
 func main() {
+
 	// Initialize configuration
 	if err := initConfig(); err != nil {
 		logrus.Fatalf("Failed to initialize config: %v", err)
@@ -80,7 +83,6 @@ func main() {
 		logrus.Fatalf("Failed to initialize NLP models: %v", err)
 	}
 
-	// Initialize gRPC server
 	grpcServer := grpc.NewServer(
 		grpc.MaxRecvMsgSize(viper.GetInt("grpc.max_receive_message_size")),
 		grpc.MaxSendMsgSize(viper.GetInt("grpc.max_send_message_size")),
@@ -89,6 +91,13 @@ func main() {
 	// Register gRPC handler
 	nlpHandler := handler.NewNLPGRPCHandler(nlpService, analysisRepo)
 	nlpv1.RegisterNLPProcessingServiceServer(grpcServer, nlpHandler)
+
+	// ADD THIS: Register standard gRPC Health Check service
+	healthServer := health.NewServer()
+	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
+	healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+	healthServer.SetServingStatus("nlp.v1.NLPProcessingService", grpc_health_v1.HealthCheckResponse_SERVING)
+	logrus.Info("gRPC Health Check service registered")
 
 	// Enable reflection for grpcurl
 	reflection.Register(grpcServer)
