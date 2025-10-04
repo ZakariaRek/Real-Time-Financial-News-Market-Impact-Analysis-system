@@ -1,79 +1,67 @@
 package com.alert_signals.AlertSignal.client;
 
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
+import com.alert_signals.AlertSignal.dto.grpc.MarketPredictionDto;
+import com.alert_signals.AlertSignal.mapper.grpc.MarketPredictionMapper;
 import io.grpc.StatusRuntimeException;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
 @Component
+@RequiredArgsConstructor
 @Slf4j
 public class MarketImpactClient {
 
-    @Value("${external.services.market-impact.host:localhost}")
-    private String marketImpactHost;
 
-    @Value("${external.services.market-impact.port:9091}")
-    private int marketImpactPort;
+    private com.alert_signals.AlertSignal.grpc.generated.MarketPredictionServiceGrpc.MarketPredictionServiceBlockingStub marketPredictionStub;
 
-    private ManagedChannel channel;
-    private com.alert_signals.AlertSignal.grpc.generated.MarketPredictionServiceGrpc.MarketPredictionServiceBlockingStub blockingStub;
+    private final MarketPredictionMapper mapper;
 
-    @PostConstruct
-    public void init() {
+    public MarketPredictionDto getPrediction(UUID predictionId) {
         try {
-            this.channel = ManagedChannelBuilder
-                    .forAddress(marketImpactHost, marketImpactPort)
-                    .usePlaintext()
-                    .build();
+            com.alert_signals.AlertSignal.grpc.generated.GetMarketPredictionRequest request =
+                    com.alert_signals.AlertSignal.grpc.generated.GetMarketPredictionRequest.newBuilder()
+                            .setId(com.alert_signals.AlertSignal.grpc.generated.UUID.newBuilder()
+                                    .setValue(predictionId.toString())
+                                    .build())
+                            .build();
 
-            this.blockingStub = com.alert_signals.AlertSignal.grpc.generated.MarketPredictionServiceGrpc.newBlockingStub(channel);
-            log.info("MarketImpact client initialized: {}:{}", marketImpactHost, marketImpactPort);
+            com.alert_signals.AlertSignal.grpc.generated.GetMarketPredictionResponse response =
+                    marketPredictionStub.getPrediction(request);
+
+            log.info("Successfully retrieved prediction for ID: {}", predictionId);
+            return mapper.toDto(response.getPrediction());
+
+        } catch (StatusRuntimeException e) {
+            log.error("gRPC error getting prediction {}: {}", predictionId, e.getStatus());
+            throw new RuntimeException("Failed to get prediction: " + e.getMessage(), e);
         } catch (Exception e) {
-            log.error("Failed to initialize MarketImpact client: {}", e.getMessage(), e);
+            log.error("Unexpected error getting prediction {}: {}", predictionId, e.getMessage());
+            throw new RuntimeException("Failed to get prediction: " + e.getMessage(), e);
         }
     }
 
-    @PreDestroy
-    public void shutdown() {
-        if (channel != null && !channel.isShutdown()) {
-            channel.shutdown();
-            log.info("MarketImpact client shutdown");
-        }
-    }
-
-    public com.alert_signals.AlertSignal.grpc.generated.MarketPrediction getPrediction(UUID predictionId) {
+    public MarketPredictionDto getLatestPrediction(String symbol) {
         try {
-            com.alert_signals.AlertSignal.grpc.generated.GetMarketPredictionRequest request = com.alert_signals.AlertSignal.grpc.generated.GetMarketPredictionRequest.newBuilder()
-                    .setId(com.alert_signals.AlertSignal.grpc.generated.UUID.newBuilder()
-                            .setValue(predictionId.toString())
-                            .build())
-                    .build();
+            com.alert_signals.AlertSignal.grpc.generated.GetLatestPredictionRequest request =
+                    com.alert_signals.AlertSignal.grpc.generated.GetLatestPredictionRequest.newBuilder()
+                            .setSymbol(symbol)
+                            .build();
 
-            com.alert_signals.AlertSignal.grpc.generated.GetMarketPredictionResponse response = blockingStub.getPrediction(request);
-            return response.getPrediction();
+            com.alert_signals.AlertSignal.grpc.generated.GetLatestPredictionResponse response =
+                    marketPredictionStub.getLatestPrediction(request);
+
+            log.info("Successfully retrieved latest prediction for symbol: {}", symbol);
+            return mapper.toDto(response.getPrediction());
+
         } catch (StatusRuntimeException e) {
-            log.error("gRPC error getting prediction {}: {}", predictionId, e.getMessage());
-            throw new RuntimeException("Failed to get prediction: " + e.getMessage());
-        }
-    }
-
-    public com.alert_signals.AlertSignal.grpc.generated.MarketPrediction getLatestPrediction(String symbol) {
-        try {
-            com.alert_signals.AlertSignal.grpc.generated.GetLatestPredictionRequest request = com.alert_signals.AlertSignal.grpc.generated.GetLatestPredictionRequest.newBuilder()
-                    .setSymbol(symbol)
-                    .build();
-
-            com.alert_signals.AlertSignal.grpc.generated.GetLatestPredictionResponse response = blockingStub.getLatestPrediction(request);
-            return response.getPrediction();
-        } catch (StatusRuntimeException e) {
-            log.error("gRPC error getting latest prediction for {}: {}", symbol, e.getMessage());
-            throw new RuntimeException("Failed to get latest prediction: " + e.getMessage());
+            log.error("gRPC error getting latest prediction for {}: {}", symbol, e.getStatus());
+            throw new RuntimeException("Failed to get latest prediction: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Unexpected error getting latest prediction for {}: {}", symbol, e.getMessage());
+            throw new RuntimeException("Failed to get latest prediction: " + e.getMessage(), e);
         }
     }
 }

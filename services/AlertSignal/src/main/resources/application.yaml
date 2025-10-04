@@ -5,7 +5,8 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/alertsignal_db
     username: postgres
-    password: zakaria
+    password: yahyasd56
+   # password: zakaria
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
@@ -40,20 +41,15 @@ spring:
 
   # gRPC Server Configuration
   grpc:
-    server:
-      port: 9090
-      max-inbound-message-size: 4MB
-      max-inbound-metadata-size: 8KB
-      keep-alive-time: 30s
-      keep-alive-timeout: 5s
-      keep-alive-without-calls: true
-      max-connection-idle: 60s
-      max-connection-age: 30s
-      max-connection-age-grace: 5s
-      permit-keep-alive-time: 10s
-      permit-keep-alive-without-calls: false
-      reflection:
-        enabled: true
+    client:
+      market-impact-service:
+        address: 'static://localhost:9091'
+        negotiationType: plaintext
+        deadline: 30s
+        max-inbound-message-size: 4MB
+  server:
+    port: 9095
+    max-inbound-message-size: 4MB
 
 # External Services Configuration
 external:

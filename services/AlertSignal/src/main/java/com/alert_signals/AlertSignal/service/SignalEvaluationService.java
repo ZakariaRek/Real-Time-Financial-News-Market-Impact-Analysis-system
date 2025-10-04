@@ -1,13 +1,12 @@
 package com.alert_signals.AlertSignal.service;
 
 import com.alert_signals.AlertSignal.client.MarketImpactClient;
+import com.alert_signals.AlertSignal.dto.grpc.MarketPredictionDto;
+import com.alert_signals.AlertSignal.dto.grpc.RiskMetricsDto;
 import com.alert_signals.AlertSignal.entity.SignalRules;
 import com.alert_signals.AlertSignal.entity.TradingSignal;
 import com.alert_signals.AlertSignal.repository.SignalRulesRepository;
 import com.alert_signals.AlertSignal.repository.TradingSignalRepository;
-import com.alert_signals.AlertSignal.grpc.generated.MarketPrediction;
-import com.alert_signals.AlertSignal.grpc.generated.RiskMetrics;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -35,21 +33,20 @@ public class SignalEvaluationService {
     private final ObjectMapper objectMapper;
 
     // Constants
-    private static final double HIGH_CONFIDENCE_THRESHOLD = 0.8;
-    private static final double MIN_IMPACT_SCORE = 50.0;
+    private static final BigDecimal HIGH_CONFIDENCE_THRESHOLD = new BigDecimal("0.8");
+    private static final BigDecimal MIN_IMPACT_SCORE = new BigDecimal("50.0");
     private static final String ACTIVE_SIGNALS_KEY = "active_signals:";
     private static final long SIGNAL_TTL_HOURS = 24;
 
     /**
      * Process prediction from MarketImpact service
-     * This is the main entry point called via gRPC
      */
     public TradingSignal processPrediction(UUID predictionId) {
         log.info("Processing prediction: {}", predictionId);
 
         try {
-            // 1. Get prediction from MarketImpact service
-            MarketPrediction prediction = marketImpactClient.getPrediction(predictionId);
+            // 1. Get prediction from MarketImpact service (now returns DTO)
+            MarketPredictionDto prediction = marketImpactClient.getPrediction(predictionId);
 
             // 2. Evaluate signal rules
             boolean rulesPass = evaluateSignalRules(prediction);
@@ -68,11 +65,10 @@ public class SignalEvaluationService {
             // 4. Calculate signal strength
             BigDecimal signalStrength = calculateSignalStrength(prediction);
 
-            // 5. Check confidence threshold
-            double confidence = Double.parseDouble(prediction.getConfidence().getValue());
-            if (confidence < HIGH_CONFIDENCE_THRESHOLD) {
+            // 5. Check confidence threshold (now using BigDecimal comparison)
+            if (prediction.getConfidence().compareTo(HIGH_CONFIDENCE_THRESHOLD) < 0) {
                 log.info("Low confidence signal discarded: {} (confidence: {})",
-                        predictionId, confidence);
+                        predictionId, prediction.getConfidence());
                 return null;
             }
 
@@ -97,7 +93,7 @@ public class SignalEvaluationService {
     /**
      * Evaluate signal rules against prediction
      */
-    private boolean evaluateSignalRules(MarketPrediction prediction) {
+    private boolean evaluateSignalRules(MarketPredictionDto prediction) {
         String symbol = prediction.getSymbol();
 
         // Get active rules for this symbol
@@ -124,7 +120,7 @@ public class SignalEvaluationService {
     /**
      * Evaluate a single rule against prediction
      */
-    private boolean evaluateRule(SignalRules rule, MarketPrediction prediction) {
+    private boolean evaluateRule(SignalRules rule, MarketPredictionDto prediction) {
         try {
             // Parse rule conditions (stored as JSON)
             RuleConditions conditions = objectMapper.readValue(
@@ -132,26 +128,23 @@ public class SignalEvaluationService {
                     RuleConditions.class
             );
 
-            double confidence = Double.parseDouble(
-                    prediction.getConfidence().getValue()
-            );
-            double impactScore = Double.parseDouble(
-                    prediction.getImpactScore().getValue()
-            );
+            // Direct BigDecimal comparison - no parsing needed!
+            BigDecimal confidence = prediction.getConfidence();
+            BigDecimal impactScore = prediction.getImpactScore();
 
             // Check conditions
             if (conditions.minConfidence != null &&
-                    confidence < conditions.minConfidence) {
+                    confidence.compareTo(conditions.minConfidence) < 0) {
                 return false;
             }
 
             if (conditions.minImpactScore != null &&
-                    impactScore < conditions.minImpactScore) {
+                    impactScore.compareTo(conditions.minImpactScore) < 0) {
                 return false;
             }
 
             if (conditions.requiredDirection != null &&
-                    !prediction.getDirection().name().equals(conditions.requiredDirection)) {
+                    !prediction.getDirection().equals(conditions.requiredDirection)) {
                 return false;
             }
 
@@ -166,26 +159,25 @@ public class SignalEvaluationService {
     /**
      * Apply risk filters to prediction
      */
-    private boolean applyRiskFilters(MarketPrediction prediction) {
-        if (prediction.getRiskMetricsCount() == 0) {
-            log.warn("No risk metrics available for prediction: {}",
-                    prediction.getId().getValue());
+    private boolean applyRiskFilters(MarketPredictionDto prediction) {
+        if (prediction.getRiskMetrics() == null || prediction.getRiskMetrics().isEmpty()) {
+            log.warn("No risk metrics available for prediction: {}", prediction.getId());
             return true; // Allow if no risk metrics
         }
 
-        RiskMetrics risk = prediction.getRiskMetrics(0);
+        RiskMetricsDto risk = prediction.getRiskMetrics().get(0); // Assume first metric
 
         // Check risk level
-        if (risk.getRiskLevel().name().equals("CRITICAL")) {
-            log.warn("Critical risk level detected for symbol: {}",
-                    prediction.getSymbol());
+        if ("CRITICAL".equals(risk.getRiskLevel())) {
+            log.warn("Critical risk level detected for symbol: {}", prediction.getSymbol());
             return false;
         }
 
-        // Check VaR threshold
-        double var = Double.parseDouble(risk.getVar951Day().getValue());
-        if (var > 10.0) { // 10% max VaR
-            log.warn("VaR too high: {} for symbol: {}", var, prediction.getSymbol());
+        // Check VaR threshold (now using BigDecimal)
+        BigDecimal maxVaR = new BigDecimal("10.0");
+        if (risk.getVar951Day().compareTo(maxVaR) > 0) {
+            log.warn("VaR too high: {} for symbol: {}",
+                    risk.getVar951Day(), prediction.getSymbol());
             return false;
         }
 
@@ -195,35 +187,41 @@ public class SignalEvaluationService {
     /**
      * Calculate signal strength based on prediction metrics
      */
-    private BigDecimal calculateSignalStrength(MarketPrediction prediction) {
-        double confidence = Double.parseDouble(prediction.getConfidence().getValue());
-        double impactScore = Double.parseDouble(prediction.getImpactScore().getValue());
-        double predictedChange = Math.abs(Double.parseDouble(
-                prediction.getPredictedChangePercent().getValue()
-        ));
+    private BigDecimal calculateSignalStrength(MarketPredictionDto prediction) {
+        BigDecimal confidence = prediction.getConfidence();
+        BigDecimal impactScore = prediction.getImpactScore();
+        BigDecimal predictedChange = prediction.getPredictedChangePercent().abs();
 
-        // Weighted combination
-        double strength = (confidence * 0.4) +
-                (impactScore / 100.0 * 0.4) +
-                (Math.min(predictedChange / 10.0, 1.0) * 0.2);
+        // Weighted combination using BigDecimal
+        BigDecimal strengthPart1 = confidence.multiply(new BigDecimal("0.4"));
+        BigDecimal strengthPart2 = impactScore.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("0.4"));
 
-        return BigDecimal.valueOf(strength).setScale(4, RoundingMode.HALF_UP);
+        // Min of (predictedChange / 10, 1.0) * 0.2
+        BigDecimal changeFactor = predictedChange.divide(new BigDecimal("10"), 4, RoundingMode.HALF_UP);
+        if (changeFactor.compareTo(BigDecimal.ONE) > 0) {
+            changeFactor = BigDecimal.ONE;
+        }
+        BigDecimal strengthPart3 = changeFactor.multiply(new BigDecimal("0.2"));
+
+        BigDecimal strength = strengthPart1.add(strengthPart2).add(strengthPart3);
+        return strength.setScale(4, RoundingMode.HALF_UP);
     }
 
     /**
      * Create trading signal from prediction
      */
     private TradingSignal createTradingSignal(
-            MarketPrediction prediction,
+            MarketPredictionDto prediction,
             BigDecimal strength) {
 
         return TradingSignal.builder()
-                .predictionId(UUID.fromString(prediction.getId().getValue()))
+                .predictionId(prediction.getId())
                 .symbol(prediction.getSymbol())
                 .signalType("PREDICTION_BASED")
-                .direction(prediction.getDirection().name())
+                .direction(prediction.getDirection())
                 .strength(strength)
-                .confidence(new BigDecimal(prediction.getConfidence().getValue()))
+                .confidence(prediction.getConfidence())
                 .status("ACTIVE")
                 .build();
     }
@@ -264,8 +262,8 @@ public class SignalEvaluationService {
 
     // Inner class for rule conditions
     private static class RuleConditions {
-        public Double minConfidence;
-        public Double minImpactScore;
+        public BigDecimal minConfidence;
+        public BigDecimal minImpactScore;
         public String requiredDirection;
     }
 }
