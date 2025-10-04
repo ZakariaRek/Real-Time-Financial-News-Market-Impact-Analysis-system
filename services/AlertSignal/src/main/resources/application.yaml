@@ -40,16 +40,17 @@ spring:
           min-idle: 2
 
   # gRPC Server Configuration
+
   grpc:
+    server:
+      port: 9095  # Change this to an available port
+      max-inbound-message-size: 4MB
     client:
       market-impact-service:
         address: 'static://localhost:9091'
         negotiationType: plaintext
         deadline: 30s
         max-inbound-message-size: 4MB
-  server:
-    port: 9095
-    max-inbound-message-size: 4MB
 
 # External Services Configuration
 external:

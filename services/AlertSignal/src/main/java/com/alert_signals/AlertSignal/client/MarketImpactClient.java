@@ -63,5 +63,6 @@ public class MarketImpactClient {
             log.error("Unexpected error getting latest prediction for {}: {}", symbol, e.getMessage());
             throw new RuntimeException("Failed to get latest prediction: " + e.getMessage(), e);
         }
+
     }
 }
