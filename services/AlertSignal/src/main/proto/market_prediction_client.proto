@@ -1,7 +1,9 @@
 syntax = "proto3";
-package com.alert_signals;
-option java_package = "com.alert_signals.AlertSignal.grpc.generated";
-option java_outer_classname = "MarketPredictionClientProto";
+
+package com.market_impact;
+
+option java_package = "com.market_impact.grpc";
+option java_outer_classname = "MarketPredictionProto";
 option java_multiple_files = true;
 
 import "common.proto";
