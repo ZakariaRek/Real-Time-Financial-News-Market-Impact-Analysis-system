@@ -347,13 +347,17 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
     private com.market_impact.grpc.MarketPrediction mapToMarketPredictionResponse(MarketPredictionDto.Response dto) {
         com.market_impact.grpc.MarketPrediction.Builder builder = com.market_impact.grpc.MarketPrediction.newBuilder()
                 .setId(createGrpcUUID(dto.getId()))
-                .setArticleId(createGrpcUUID(dto.getArticleId()))
                 .setSymbol(dto.getSymbol())
                 .setPredictedChangePercent(createGrpcDecimal(dto.getPredictedChangePercent()))
                 .setDirection(Direction.valueOf(dto.getDirection()))
                 .setConfidence(createGrpcDecimal(dto.getConfidence()))
                 .setImpactScore(createGrpcDecimal(dto.getImpactScore()))
                 .setModelType(dto.getModelType());
+
+        // Handle nullable articleId
+        if (dto.getArticleId() != null) {
+            builder.setArticleId(createGrpcUUID(dto.getArticleId()));
+        }
 
         if (dto.getPredictionTimestamp() != null) {
             builder.setPredictionTimestamp(toGrpcTimestamp(dto.getPredictionTimestamp()));
@@ -393,12 +397,16 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
     private RiskMetrics mapToRiskMetricsResponse(RiskMetricsDto.Response dto) {
         RiskMetrics.Builder builder = RiskMetrics.newBuilder()
                 .setId(createGrpcUUID(dto.getId()))
-                .setPredictionId(createGrpcUUID(dto.getPredictionId()))
                 .setSymbol(dto.getSymbol())
                 .setVar951Day(createGrpcDecimal(dto.getVar951day()))
                 .setHistoricalVolatility30D(createGrpcDecimal(dto.getHistoricalVolatility30d()))
                 .setMarketCorrelation(createGrpcDecimal(dto.getMarketCorrelation()))
                 .setRiskLevel(RiskLevel.valueOf(dto.getRiskLevel()));
+
+        // Handle nullable predictionId
+        if (dto.getPredictionId() != null) {
+            builder.setPredictionId(createGrpcUUID(dto.getPredictionId()));
+        }
 
         if (dto.getCreatedAt() != null) {
             builder.setCreatedAt(toGrpcTimestamp(dto.getCreatedAt()));
@@ -409,7 +417,6 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
 
         return builder.build();
     }
-
     // Common conversion helper methods
 
     private com.market_impact.grpc.UUID createGrpcUUID(UUID uuid) {
