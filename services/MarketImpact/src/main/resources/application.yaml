@@ -130,6 +130,11 @@ external:
       port: 4002
       timeout: 30s
 
+    alert-signal:
+      host: localhost
+      port: 9095
+      timeout: 30s
+
 
 
   task:

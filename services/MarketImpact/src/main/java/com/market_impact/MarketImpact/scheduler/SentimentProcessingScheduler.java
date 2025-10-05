@@ -3,6 +3,7 @@ package com.market_impact.MarketImpact.scheduler;
 
 import com.market_impact.MarketImpact.Services.MarketImpactPredictionService;
 import com.market_impact.MarketImpact.Services.SP500MarketImpactService;
+import com.market_impact.MarketImpact.client.AlertSignalClient;
 import com.market_impact.MarketImpact.client.NLPServiceClient;
 import com.market_impact.MarketImpact.client.SentimentTrendData;
 import com.market_impact.MarketImpact.Config.SP500Config;
@@ -30,6 +31,7 @@ public class SentimentProcessingScheduler {
     private final NLPServiceClient nlpServiceClient;
     private final MarketImpactPredictionService predictionService;
     private final SP500MarketImpactService sp500Service;
+    private final AlertSignalClient alertSignalClient; // ADD THIS
     private final SP500Config sp500Config;
 
     private final ExecutorService executorService = Executors.newFixedThreadPool(5);
@@ -97,9 +99,8 @@ public class SentimentProcessingScheduler {
         try {
             log.debug("Processing symbol: {}", symbol);
 
-            // Get sentiment trends from NLP service
             List<SentimentTrendData> trends = nlpServiceClient.getSentimentTrends(
-                    symbol, startTime, endTime, 24); // 24 hours of data
+                    symbol, startTime, endTime, 24);
 
             if (trends == null || trends.isEmpty()) {
                 log.warn("No sentiment data available for symbol: {}", symbol);
@@ -109,15 +110,7 @@ public class SentimentProcessingScheduler {
 
             log.info("Found {} sentiment trends for {}", trends.size(), symbol);
 
-            // Log first trend for debugging
-            if (!trends.isEmpty()) {
-                SentimentTrendData firstTrend = trends.get(0);
-                log.debug("First trend for {}: sentiment={}, articles={}, volatility={}",
-                        symbol, firstTrend.getAvgSentiment(),
-                        firstTrend.getArticleCount(), firstTrend.getVolatility());
-            }
-
-            // Generate market impact prediction
+            // Generate prediction
             MarketPrediction prediction = predictionService.generatePredictionFromSentimentTrends(
                     symbol, trends);
 
@@ -131,6 +124,14 @@ public class SentimentProcessingScheduler {
             // Notify SSE subscribers
             sp500Service.notifyPredictionUpdate(prediction);
 
+            // **ADD THIS: Notify AlertSignal via gRPC**
+            alertSignalClient.notifyPrediction(
+                    prediction.getId().toString(),
+                    prediction.getSymbol(),
+                    prediction.getConfidence().doubleValue(),
+                    prediction.getImpactScore().doubleValue()
+            );
+
             successCount.incrementAndGet();
 
         } catch (Exception e) {
@@ -138,6 +139,7 @@ public class SentimentProcessingScheduler {
             failureCount.incrementAndGet();
         }
     }
+
 
     /**
      * Cleanup old predictions (run daily at 2 AM)
