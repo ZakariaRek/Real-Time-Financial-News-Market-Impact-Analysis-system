@@ -416,7 +416,7 @@ public class MarketPredictionGrpcService extends MarketPredictionServiceGrpc.Mar
         }
 
         return builder.build();
-    }
+    }   
     // Common conversion helper methods
 
     private com.market_impact.grpc.UUID createGrpcUUID(UUID uuid) {

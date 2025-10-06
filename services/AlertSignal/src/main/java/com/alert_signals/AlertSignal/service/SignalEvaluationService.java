@@ -132,22 +132,36 @@ public class SignalEvaluationService {
             BigDecimal confidence = prediction.getConfidence();
             BigDecimal impactScore = prediction.getImpactScore();
 
+            // **ADD THIS LOGGING**
+            log.info("Evaluating rule '{}' for {}: confidence={} (min={}), impact={} (min={}), direction={} (required={})",
+                    rule.getRuleName(), prediction.getSymbol(),
+                    confidence, conditions.minConfidence,
+                    impactScore, conditions.minImpactScore,
+                    prediction.getDirection(), conditions.requiredDirection);
+
             // Check conditions
             if (conditions.minConfidence != null &&
                     confidence.compareTo(conditions.minConfidence) < 0) {
+                log.info("Rule '{}' FAILED: confidence {} < {}",
+                        rule.getRuleName(), confidence, conditions.minConfidence);
                 return false;
             }
 
             if (conditions.minImpactScore != null &&
                     impactScore.compareTo(conditions.minImpactScore) < 0) {
+                log.info("Rule '{}' FAILED: impactScore {} < {}",
+                        rule.getRuleName(), impactScore, conditions.minImpactScore);
                 return false;
             }
 
             if (conditions.requiredDirection != null &&
                     !prediction.getDirection().equals(conditions.requiredDirection)) {
+                log.info("Rule '{}' FAILED: direction {} != {}",
+                        rule.getRuleName(), prediction.getDirection(), conditions.requiredDirection);
                 return false;
             }
 
+            log.info("Rule '{}' PASSED!", rule.getRuleName());
             return true;
 
         } catch (Exception e) {
@@ -155,7 +169,6 @@ public class SignalEvaluationService {
             return false;
         }
     }
-
     /**
      * Apply risk filters to prediction
      */
