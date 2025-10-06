@@ -34,9 +34,20 @@ public class MarketPredictionMapper {
                         convertTimestamp(grpcPrediction.getPredictionTimestamp()) : null)
                 .riskMetrics(grpcPrediction.getRiskMetricsCount() > 0 ?
                         grpcPrediction.getRiskMetricsList().stream()
+                                .filter(this::isValidRiskMetric)  // ADD THIS FILTER
                                 .map(this::mapRiskMetrics)
                                 .toList() : null)
                 .build();
+    }
+
+    // ADD THIS HELPER METHOD
+    private boolean isValidRiskMetric(RiskMetrics rm) {
+        return rm != null
+                && rm.hasId()
+                && !rm.getId().getValue().isEmpty()
+                && rm.hasVar951Day()
+                && rm.getVar951Day().getValue() != null
+                && !rm.getVar951Day().getValue().isEmpty();
     }
 
     private LocalDateTime convertTimestamp(com.google.protobuf.Timestamp timestamp) {
@@ -51,10 +62,18 @@ public class MarketPredictionMapper {
     }
 
     private RiskMetricsDto mapRiskMetrics(RiskMetrics rm) {
+        // Helper method to safely parse UUID
+        UUID id = (rm.hasId() && !rm.getId().getValue().isEmpty())
+                ? UUID.fromString(rm.getId().getValue())
+                : null;
+
+        UUID predictionId = (rm.hasPredictionId() && !rm.getPredictionId().getValue().isEmpty())
+                ? UUID.fromString(rm.getPredictionId().getValue())
+                : null;
+
         return RiskMetricsDto.builder()
-                .id(UUID.fromString(rm.getId().getValue()))
-                .predictionId(rm.hasPredictionId() && !rm.getPredictionId().getValue().isEmpty() ?
-                        UUID.fromString(rm.getPredictionId().getValue()) : null)
+                .id(id)
+                .predictionId(predictionId)
                 .symbol(rm.getSymbol())
                 .var951Day(new BigDecimal(rm.getVar951Day().getValue()))
                 .historicalVolatility30d(new BigDecimal(rm.getHistoricalVolatility30D().getValue()))
