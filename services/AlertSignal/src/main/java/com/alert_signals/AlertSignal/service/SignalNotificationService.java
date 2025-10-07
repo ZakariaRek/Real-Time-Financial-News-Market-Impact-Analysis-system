@@ -37,7 +37,7 @@ public class SignalNotificationService {
 
             // Initialize performance tracking
             SignalPerformance performance = SignalPerformance.builder()
-                    .signal(savedSignal)
+                    .signalId(savedSignal.getId())  // ✅ Use signalId instead
                     .performanceDate(LocalDateTime.now().toLocalDate())
                     .accuracy(BigDecimal.ZERO)
                     .return1d(BigDecimal.ZERO)
