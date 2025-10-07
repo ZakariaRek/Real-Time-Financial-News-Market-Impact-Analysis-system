@@ -4,16 +4,20 @@ FROM golang:1.23-alpine AS builder
 # Set working directory
 WORKDIR /app
 
-# Install dependencies for building
+# Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
 
 # Copy go.mod and go.sum first for better caching
 COPY go.mod go.sum ./
+
+# Download dependencies
 RUN go mod download
+
+# Copy the generated proto files (already generated locally)
+COPY proto/ proto/
 
 # Copy source code
 COPY internal/ internal/
-COPY proto/ proto/
 COPY main.go .
 
 # Build the application with optimizations
@@ -25,9 +29,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 # Create minimal production image
 FROM alpine:3.19
 
-# Install ca-certificates, curl, and grpc-health-probe for health checks
+# Install runtime dependencies and health check tool
 RUN apk --no-cache add ca-certificates curl tzdata && \
-    wget -qO /usr/local/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.24/grpc_health_probe-linux-amd64 && \
+    wget -qO /usr/local/bin/grpc_health_probe \
+    https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.24/grpc_health_probe-linux-amd64 && \
     chmod +x /usr/local/bin/grpc_health_probe
 
 # Create non-root user for security
@@ -37,17 +42,15 @@ RUN addgroup -g 1001 -S appgroup && \
 # Set working directory
 WORKDIR /app
 
-# Create necessary directories
+# Create directories and set ownership
 RUN mkdir -p config models/sentiment && \
     chown -R appuser:appgroup /app
 
 # Copy the binary from builder stage
 COPY --from=builder --chown=appuser:appgroup /app/nlp-processing-service .
 
-# Copy config directory
+# Copy config and models
 COPY --chown=appuser:appgroup config/ ./config/
-
-# Copy models directory (critical for sentiment analysis)
 COPY --chown=appuser:appgroup models/ ./models/
 
 # Switch to non-root user

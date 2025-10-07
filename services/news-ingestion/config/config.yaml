@@ -10,7 +10,7 @@ database:
     port: 5432
     database: news_ingestion
     username: postgres
-    password: yahyasd56
+    password: zakaria
     ssl_mode: disable
     max_open_conns: 25
     max_idle_conns: 5

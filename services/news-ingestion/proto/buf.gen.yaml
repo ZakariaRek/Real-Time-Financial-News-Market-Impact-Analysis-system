@@ -1,8 +1,17 @@
+#version: v1
+#plugins:
+#  - name: go
+#    out: ./services/news-ingestion/proto/gen
+#    opt: paths=source_relative
+#  - name: go-grpc
+#    out: ./services/news-ingestion/proto/gen
+#    opt: paths=source_relative
+
 version: v1
 plugins:
   - name: go
-    out: ./services/news-ingestion/proto/gen
+    out: ./gen/nlp/v1
     opt: paths=source_relative
   - name: go-grpc
-    out: ./services/news-ingestion/proto/gen
+    out: ./gen/nlp/v1
     opt: paths=source_relative

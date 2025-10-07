@@ -4,22 +4,27 @@ FROM golang:1.23-alpine AS builder
 # Set working directory
 WORKDIR /app
 
-# Install dependencies for building
+# Install build dependencies including protoc
 RUN apk add --no-cache git ca-certificates tzdata
 
-# Copy go.mod and go.sum first for better caching
+# Install Go protoc plugins
 COPY go.mod go.sum ./
+
+# Download dependencies
+
 RUN go mod download
+
+# Copy proto files first
+COPY proto/ proto/
+
+
 
 # Copy source code
 COPY internal/ internal/
-COPY proto/ proto/
 COPY main.go .
 
-# Copy config directory if it exists
-COPY config* config/ 2>/dev/null || true
-
-# Build the application with optimizations
+# Copy config if exist
+# Build the application
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags='-w -s -extldflags "-static"' \
     -a -installsuffix cgo \
@@ -28,21 +33,27 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 # Create minimal production image
 FROM alpine:3.19
 
-# Install ca-certificates and curl for health checks
-RUN apk --no-cache add ca-certificates curl tzdata
+# Install ca-certificates and curl
+#RUN #apk --no-cache add ca-certificates curl tzdata
 
-# Create non-root user for security
+# Install runtime dependencies and health check tool
+RUN apk --no-cache add ca-certificates curl tzdata && \
+    wget -qO /usr/local/bin/grpc_health_probe \
+    https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.24/grpc_health_probe-linux-amd64 && \
+    chmod +x /usr/local/bin/grpc_health_probe
+
+# Create non-root user
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
 # Set working directory
 WORKDIR /app
 
-# Copy the binary from builder stage
+# Copy the binary
 COPY --from=builder --chown=appuser:appgroup /app/news-ingestion-service .
 
-# Copy config directory if exists
-COPY --from=builder --chown=appuser:appgroup /app/config* ./config/ 2>/dev/null || true
+# Copy config if exists
+COPY --chown=appuser:appgroup config/ ./config/
 
 # Switch to non-root user
 USER appuser:appgroup
@@ -50,7 +61,7 @@ USER appuser:appgroup
 # Expose HTTP and gRPC ports
 EXPOSE 4001 4002
 
-# Health check (HTTP endpoint)
+# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:4001/health || exit 1
 
