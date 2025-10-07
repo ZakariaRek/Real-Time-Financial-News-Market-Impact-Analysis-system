@@ -1,69 +1,58 @@
-# ========================================
-# Stage 1: Build Stage
-# ========================================
-FROM golang:1.23.0-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache git make gcc musl-dev
+# Multi-stage build for News Ingestion Service
+FROM golang:1.23-alpine AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Copy go mod files
-COPY go.mod go.sum ./
+# Install dependencies for building
+RUN apk add --no-cache git ca-certificates tzdata
 
-# Download dependencies
+# Copy go.mod and go.sum first for better caching
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source code
-COPY . .
+COPY internal/ internal/
+COPY proto/ proto/
+COPY main.go .
 
-# Build the application
+# Copy config directory if it exists
+COPY config* config/ 2>/dev/null || true
+
+# Build the application with optimizations
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
-    -o /app/bin/news-ingestion \
-    ./main.go
+    -ldflags='-w -s -extldflags "-static"' \
+    -a -installsuffix cgo \
+    -o news-ingestion-service main.go
 
-# ========================================
-# Stage 2: Runtime Stage
-# ========================================
-FROM alpine:3.18
+# Create minimal production image
+FROM alpine:3.19
 
-# Install runtime dependencies
-RUN apk add --no-cache \
-    ca-certificates \
-    tzdata \
-    curl
+# Install ca-certificates and curl for health checks
+RUN apk --no-cache add ca-certificates curl tzdata
 
-# Create non-root user
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+# Create non-root user for security
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
 
 # Set working directory
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/bin/news-ingestion /app/news-ingestion
+# Copy the binary from builder stage
+COPY --from=builder --chown=appuser:appgroup /app/news-ingestion-service .
 
-# Copy configuration files
-COPY --from=builder /app/config /app/config
-
-# Set ownership
-RUN chown -R appuser:appuser /app
+# Copy config directory if exists
+COPY --from=builder --chown=appuser:appgroup /app/config* ./config/ 2>/dev/null || true
 
 # Switch to non-root user
-USER appuser
+USER appuser:appgroup
 
-# Expose ports
+# Expose HTTP and gRPC ports
 EXPOSE 4001 4002
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:4001/health || exit 1
-
-# Set environment variables
-ENV GIN_MODE=release \
-    TZ=UTC
+# Health check (HTTP endpoint)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:4001/health || exit 1
 
 # Run the application
-ENTRYPOINT ["/app/news-ingestion"]
+ENTRYPOINT ["./news-ingestion-service"]

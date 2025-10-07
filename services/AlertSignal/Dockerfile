@@ -1,6 +1,6 @@
-# Dockerfile.jar-only for MarketImpact
+# Dockerfile.jar-only for AlertSignal
 # Build JAR first: ./mvnw clean package -DskipTests
-# Then build image: docker build -f Dockerfile.jar-only -t marketimpact:latest .
+# Then build image: docker build -f Dockerfile.jar-only -t alertsignal:latest .
 
 FROM eclipse-temurin:21-jre-alpine
 
@@ -14,18 +14,18 @@ RUN addgroup -S spring && adduser -S spring -G spring
 
 # Copy the pre-built JAR
 # Make sure to build first: ./mvnw clean package -DskipTests
-COPY target/MarketImpact-0.0.1-SNAPSHOT.jar app.jar
+COPY target/AlertSignal-0.0.1-SNAPSHOT.jar app.jar
 
 # Change ownership
 RUN chown spring:spring app.jar
 USER spring:spring
 
 # Expose ports (HTTP and gRPC)
-EXPOSE 8082 9090
+EXPOSE 8081 9095
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8082/market-impact/actuator/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8081/api/actuator/health || exit 1
 
 # JVM options for containerized environment
 ENV JAVA_OPTS="-XX:+UseContainerSupport \
