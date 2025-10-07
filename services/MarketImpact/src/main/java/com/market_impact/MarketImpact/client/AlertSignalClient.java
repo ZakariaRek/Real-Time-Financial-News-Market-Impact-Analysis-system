@@ -27,25 +27,31 @@ public class AlertSignalClient {
 
     @PostConstruct
     public void init() {
+        log.info("🔌 Initializing AlertSignal gRPC client: {}:{}", host, port);
+
         this.channel = ManagedChannelBuilder
                 .forAddress(host, port)
                 .usePlaintext()
                 .build();
 
         this.stub = SignalProcessingServiceGrpc.newBlockingStub(channel);
-        log.info("AlertSignal gRPC client initialized: {}:{}", host, port);
+        log.info("✅ AlertSignal gRPC client initialized successfully");
     }
 
     @PreDestroy
     public void shutdown() {
         if (channel != null) {
             channel.shutdown();
+            log.info("🔌 AlertSignal gRPC client shutdown");
         }
     }
 
     public void notifyPrediction(String predictionId, String symbol,
                                  double confidence, double impactScore) {
         try {
+            log.info("📤 Sending prediction to AlertSignal: predictionId={}, symbol={}, confidence={}, impact={}",
+                    predictionId, symbol, confidence, impactScore);
+
             PredictImpactRequest request = PredictImpactRequest.newBuilder()
                     .setPredictionId(predictionId)
                     .setSymbol(symbol)
@@ -56,13 +62,14 @@ public class AlertSignalClient {
             PredictImpactResponse response = stub.predictImpact(request);
 
             if (response.getSuccess()) {
-                log.info("✓ AlertSignal processed prediction: signalId={}, message={}",
+                log.info("✅ AlertSignal processed prediction successfully: signalId={}, message={}",
                         response.getSignalId(), response.getMessage());
             } else {
-                log.warn("AlertSignal did not create signal: {}", response.getMessage());
+                log.warn("⚠️ AlertSignal did not create signal: {}", response.getMessage());
             }
         } catch (Exception e) {
-            log.error("Failed to notify AlertSignal: {}", e.getMessage());
+            log.error("❌ Failed to notify AlertSignal: {} - {}", e.getClass().getName(), e.getMessage());
+            e.printStackTrace();
         }
     }
 }
