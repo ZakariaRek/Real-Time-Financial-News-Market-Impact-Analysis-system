@@ -12,7 +12,7 @@ database:
     port: 5432
     database: nlp_processing
     username: postgres
-    password: zakaria
+    password: yahyasd56
     # AWS RDS specific settings for production
     # ssl_mode: require
     # max_open_conns: 30

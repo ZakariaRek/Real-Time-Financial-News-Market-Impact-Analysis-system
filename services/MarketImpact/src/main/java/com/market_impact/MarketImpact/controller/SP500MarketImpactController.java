@@ -4,6 +4,7 @@ package com.market_impact.MarketImpact.controller;
 import com.market_impact.MarketImpact.Services.SP500MarketImpactService;
 import com.market_impact.MarketImpact.dto.MarketImpactDto;
 import com.market_impact.MarketImpact.dto.MarketSentimentSummary;
+import com.market_impact.MarketImpact.entity.MarketPrediction;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -11,8 +12,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/sp500/market-impact")
@@ -110,5 +114,28 @@ public class SP500MarketImpactController {
         }
 
         return emitter;
+    }
+
+
+    @PostMapping("/test-notification")
+    public ResponseEntity<String> testNotification(@RequestParam String symbol) {
+        log.info("TEST: Creating test prediction for {}", symbol);
+
+        // Create a test prediction
+        MarketPrediction testPrediction = MarketPrediction.builder()
+                .id(UUID.randomUUID())
+                .symbol(symbol)
+                .predictedChangePercent(new BigDecimal("2.50"))
+                .direction("UP")
+                .confidence(new BigDecimal("0.85"))
+                .impactScore(new BigDecimal("75.5"))
+                .modelType("TEST_MODEL")
+                .predictionTimestamp(LocalDateTime.now())
+                .build();
+
+        // Trigger SSE notification
+        sp500Service.notifyPredictionUpdate(testPrediction);
+
+        return ResponseEntity.ok("Test notification sent for " + symbol);
     }
 }
