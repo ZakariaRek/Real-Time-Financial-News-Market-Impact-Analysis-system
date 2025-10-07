@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package com.alert_signals;
+
+option java_multiple_files = true;
+option java_package = "com.alert_signals.AlertSignal.grpc.generated";
+
+import "google/protobuf/timestamp.proto";
+
+// Signal Processing Service
+// Receives predictions from MarketImpact service and generates trading signals
+service SignalProcessingService {
+  // Process prediction impact and generate signal if criteria met
+  // Called by MarketImpact service via gRPC
+  rpc PredictImpact(PredictImpactRequest) returns (PredictImpactResponse);
+
+  // Stream predictions for real-time signal generation
+  rpc StreamPredictions(stream PredictionStreamRequest) returns (stream SignalStreamResponse);
+}
+
+// Request to process prediction impact
+message PredictImpactRequest {
+  string prediction_id = 1;
+  string symbol = 2;
+  double confidence = 3;
+  double impact_score = 4;
+}
+
+// Response after processing prediction
+message PredictImpactResponse {
+  bool success = 1;
+  string signal_id = 2;
+  string message = 3;
+  double confidence = 4;
+  double strength = 5;
+}
+
+// Streaming prediction request
+message PredictionStreamRequest {
+  string prediction_id = 1;
+  string symbol = 2;
+  double confidence = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+// Streaming signal response
+message SignalStreamResponse {
+  string signal_id = 1;
+  string symbol = 2;
+  string direction = 3;
+  double confidence = 4;
+  double strength = 5;
+  google.protobuf.Timestamp timestamp = 6;
+}

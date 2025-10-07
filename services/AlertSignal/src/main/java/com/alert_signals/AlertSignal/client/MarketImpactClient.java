@@ -2,9 +2,15 @@ package com.alert_signals.AlertSignal.client;
 
 import com.alert_signals.AlertSignal.dto.grpc.MarketPredictionDto;
 import com.alert_signals.AlertSignal.mapper.grpc.MarketPredictionMapper;
+import com.market_impact.grpc.*; // Changed to use MarketImpact's generated classes
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -14,22 +20,51 @@ import java.util.UUID;
 @Slf4j
 public class MarketImpactClient {
 
+    @Value("${grpc.client.market-impact-service.address:static://localhost:9090}")
+    private String address;
 
-    private com.alert_signals.AlertSignal.grpc.generated.MarketPredictionServiceGrpc.MarketPredictionServiceBlockingStub marketPredictionStub;
+    private ManagedChannel channel;
+    private MarketPredictionServiceGrpc.MarketPredictionServiceBlockingStub marketPredictionStub;
 
     private final MarketPredictionMapper mapper;
 
+    @PostConstruct
+    public void init() {
+        try {
+            String[] parts = address.replace("static://", "").split(":");
+            String host = parts[0];
+            int port = Integer.parseInt(parts[1]);
+
+            this.channel = ManagedChannelBuilder
+                    .forAddress(host, port)
+                    .usePlaintext()
+                    .build();
+
+            this.marketPredictionStub = MarketPredictionServiceGrpc.newBlockingStub(channel);
+
+            log.info("MarketImpact gRPC client initialized: {}:{}", host, port);
+        } catch (Exception e) {
+            log.error("Failed to initialize MarketImpact gRPC client: {}", e.getMessage(), e);
+        }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        if (channel != null && !channel.isShutdown()) {
+            channel.shutdown();
+            log.info("MarketImpact gRPC client shutdown");
+        }
+    }
+
     public MarketPredictionDto getPrediction(UUID predictionId) {
         try {
-            com.alert_signals.AlertSignal.grpc.generated.GetMarketPredictionRequest request =
-                    com.alert_signals.AlertSignal.grpc.generated.GetMarketPredictionRequest.newBuilder()
-                            .setId(com.alert_signals.AlertSignal.grpc.generated.UUID.newBuilder()
-                                    .setValue(predictionId.toString())
-                                    .build())
-                            .build();
+            GetMarketPredictionRequest request = GetMarketPredictionRequest.newBuilder()
+                    .setId(com.market_impact.grpc.UUID.newBuilder()
+                            .setValue(predictionId.toString())
+                            .build())
+                    .build();
 
-            com.alert_signals.AlertSignal.grpc.generated.GetMarketPredictionResponse response =
-                    marketPredictionStub.getPrediction(request);
+            GetMarketPredictionResponse response = marketPredictionStub.getPrediction(request);
 
             log.info("Successfully retrieved prediction for ID: {}", predictionId);
             return mapper.toDto(response.getPrediction());
@@ -45,13 +80,11 @@ public class MarketImpactClient {
 
     public MarketPredictionDto getLatestPrediction(String symbol) {
         try {
-            com.alert_signals.AlertSignal.grpc.generated.GetLatestPredictionRequest request =
-                    com.alert_signals.AlertSignal.grpc.generated.GetLatestPredictionRequest.newBuilder()
-                            .setSymbol(symbol)
-                            .build();
+            GetLatestPredictionRequest request = GetLatestPredictionRequest.newBuilder()
+                    .setSymbol(symbol)
+                    .build();
 
-            com.alert_signals.AlertSignal.grpc.generated.GetLatestPredictionResponse response =
-                    marketPredictionStub.getLatestPrediction(request);
+            GetLatestPredictionResponse response = marketPredictionStub.getLatestPrediction(request);
 
             log.info("Successfully retrieved latest prediction for symbol: {}", symbol);
             return mapper.toDto(response.getPrediction());
@@ -63,6 +96,5 @@ public class MarketImpactClient {
             log.error("Unexpected error getting latest prediction for {}: {}", symbol, e.getMessage());
             throw new RuntimeException("Failed to get latest prediction: " + e.getMessage(), e);
         }
-
     }
 }

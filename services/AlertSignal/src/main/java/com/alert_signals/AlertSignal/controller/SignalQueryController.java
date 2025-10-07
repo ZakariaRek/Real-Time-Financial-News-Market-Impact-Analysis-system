@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
  * - "REST API: Get signal performance"
  */
 @RestController
-@RequestMapping("/api/signals")
+@RequestMapping("/signals")
 @RequiredArgsConstructor
 @Slf4j
 @CrossOrigin(origins = "*") // Configure appropriately for production
