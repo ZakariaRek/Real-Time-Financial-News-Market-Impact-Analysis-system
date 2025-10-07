@@ -41,7 +41,7 @@ public class SignalProcessingGrpcService {
                 log.info("High-confidence signal created: {}", signal.getId());
 
                 // Process notifications
-                signalNotificationService.processNewSignal(signal);
+                signalNotificationService.processAndNotifySignal(signal, "High-Confidence Prediction");
             } else {
                 log.info("Signal discarded - criteria not met for prediction: {}", predId);
             }
@@ -62,7 +62,7 @@ public class SignalProcessingGrpcService {
             TradingSignal signal = signalEvaluationService.processPrediction(predId);
 
             if (signal != null) {
-                signalNotificationService.processNewSignal(signal);
+                signalNotificationService.processAndNotifySignal(signal, "High-Confidence Prediction");
 
                 return SignalResult.builder()
                         .success(true)

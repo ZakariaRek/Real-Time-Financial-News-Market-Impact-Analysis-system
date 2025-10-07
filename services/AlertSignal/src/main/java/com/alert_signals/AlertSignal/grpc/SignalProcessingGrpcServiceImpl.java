@@ -36,7 +36,7 @@ public class SignalProcessingGrpcServiceImpl extends SignalProcessingServiceGrpc
                 log.info("High-confidence signal created: {}", signal.getId());
 
                 // Process notifications (this broadcasts via WebSocket!)
-                signalNotificationService.processNewSignal(signal);
+                signalNotificationService.processAndNotifySignal(signal, "High-Confidence Prediction");
 
                 responseBuilder
                         .setSuccess(true)
