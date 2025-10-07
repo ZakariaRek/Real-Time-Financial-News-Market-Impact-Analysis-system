@@ -30,7 +30,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/market_impact?currentSchema=public
     username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:yahyasd56}
+    password: ${DB_PASSWORD:zakaria}
 #    password: ${DB_PASSWORD:yahyasd56}
 
     driver-class-name: org.postgresql.Driver

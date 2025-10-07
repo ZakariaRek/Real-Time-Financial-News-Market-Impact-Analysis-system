@@ -1,50 +1,67 @@
-# Build stage
+# Multi-stage build for NLP Processing Service
 FROM golang:1.23-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache git make gcc musl-dev
 
 # Set working directory
 WORKDIR /app
 
-# Copy go mod files
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
+
+# Copy go.mod and go.sum first for better caching
 COPY go.mod go.sum ./
 
 # Download dependencies
 RUN go mod download
 
+# Copy the generated proto files (already generated locally)
+COPY proto/ proto/
+
 # Copy source code
-COPY . .
+COPY internal/ internal/
+COPY main.go .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o nlp-processing main.go
+# Build the application with optimizations
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags='-w -s -extldflags "-static"' \
+    -a -installsuffix cgo \
+    -o nlp-processing-service main.go
 
-# Runtime stage
-FROM alpine:latest
+# Create minimal production image
+FROM alpine:3.19
 
-# Install ca-certificates for HTTPS calls
-RUN apk --no-cache add ca-certificates tzdata
+# Install runtime dependencies and health check tool
+RUN apk --no-cache add ca-certificates curl tzdata && \
+    wget -qO /usr/local/bin/grpc_health_probe \
+    https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.24/grpc_health_probe-linux-amd64 && \
+    chmod +x /usr/local/bin/grpc_health_probe
 
-WORKDIR /root/
+# Create non-root user for security
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
 
-# Copy the binary from builder
-COPY --from=builder /app/nlp-processing .
+# Set working directory
+WORKDIR /app
 
-# Copy configuration files
-COPY --from=builder /app/config ./config
+# Create directories and set ownership
+RUN mkdir -p config models/sentiment && \
+    chown -R appuser:appgroup /app
 
-# Copy pre-trained models
-COPY --from=builder /app/models ./models
+# Copy the binary from builder stage
+COPY --from=builder --chown=appuser:appgroup /app/nlp-processing-service .
 
-# Create models directory if it doesn't exist
-RUN mkdir -p ./models/sentiment
+# Copy config and models
+COPY --chown=appuser:appgroup config/ ./config/
+COPY --chown=appuser:appgroup models/ ./models/
+
+# Switch to non-root user
+USER appuser:appgroup
 
 # Expose gRPC port
 EXPOSE 50052
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:50052/ || exit 1
+# Health check using grpc-health-probe
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD /usr/local/bin/grpc_health_probe -addr=:50052 || exit 1
 
 # Run the application
-CMD ["./nlp-processing"]
+ENTRYPOINT ["./nlp-processing-service"]

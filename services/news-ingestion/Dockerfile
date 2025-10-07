@@ -1,69 +1,69 @@
-# ========================================
-# Stage 1: Build Stage
-# ========================================
-FROM golang:1.23.0-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache git make gcc musl-dev
+# Multi-stage build for News Ingestion Service
+FROM golang:1.23-alpine AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Copy go mod files
+# Install build dependencies including protoc
+RUN apk add --no-cache git ca-certificates tzdata
+
+# Install Go protoc plugins
 COPY go.mod go.sum ./
 
 # Download dependencies
+
 RUN go mod download
 
-# Copy source code
-COPY . .
+# Copy proto files first
+COPY proto/ proto/
 
+
+
+# Copy source code
+COPY internal/ internal/
+COPY main.go .
+
+# Copy config if exist
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
-    -o /app/bin/news-ingestion \
-    ./main.go
+    -ldflags='-w -s -extldflags "-static"' \
+    -a -installsuffix cgo \
+    -o news-ingestion-service main.go
 
-# ========================================
-# Stage 2: Runtime Stage
-# ========================================
-FROM alpine:3.18
+# Create minimal production image
+FROM alpine:3.19
 
-# Install runtime dependencies
-RUN apk add --no-cache \
-    ca-certificates \
-    tzdata \
-    curl
+# Install ca-certificates and curl
+#RUN #apk --no-cache add ca-certificates curl tzdata
+
+# Install runtime dependencies and health check tool
+RUN apk --no-cache add ca-certificates curl tzdata && \
+    wget -qO /usr/local/bin/grpc_health_probe \
+    https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.24/grpc_health_probe-linux-amd64 && \
+    chmod +x /usr/local/bin/grpc_health_probe
 
 # Create non-root user
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
 
 # Set working directory
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/bin/news-ingestion /app/news-ingestion
+# Copy the binary
+COPY --from=builder --chown=appuser:appgroup /app/news-ingestion-service .
 
-# Copy configuration files
-COPY --from=builder /app/config /app/config
-
-# Set ownership
-RUN chown -R appuser:appuser /app
+# Copy config if exists
+COPY --chown=appuser:appgroup config/ ./config/
 
 # Switch to non-root user
-USER appuser
+USER appuser:appgroup
 
-# Expose ports
+# Expose HTTP and gRPC ports
 EXPOSE 4001 4002
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:4001/health || exit 1
-
-# Set environment variables
-ENV GIN_MODE=release \
-    TZ=UTC
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:4001/health || exit 1
 
 # Run the application
-ENTRYPOINT ["/app/news-ingestion"]
+ENTRYPOINT ["./news-ingestion-service"]
