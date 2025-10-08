@@ -16,11 +16,10 @@ variables:
   DOCKER_IMAGE: "yahyazakaria123/alertsignal"
 
 cache:
-  key: alertsignal-cache
+  key: alertsignal-cachz
   paths:
     - $SERVICE_DIR/.m2/repository
 
-# ==================== TEST STAGE ====================
 test:
   stage: test
   image: maven:3.9-eclipse-temurin-21
