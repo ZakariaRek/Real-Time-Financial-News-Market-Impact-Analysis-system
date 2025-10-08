@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -752,10 +753,15 @@ func incrementErrorMetric() {
 }
 
 func initConfig() error {
+	// Set up viper to read from config file
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("./config")
 	viper.AddConfigPath(".")
+
+	// Enable reading from environment variables
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	// Server defaults
 	viper.SetDefault("server.port", 4001)
@@ -767,12 +773,18 @@ func initConfig() error {
 	viper.SetDefault("database.postgres.port", 5432)
 	viper.SetDefault("database.postgres.database", "news_ingestion")
 	viper.SetDefault("database.postgres.username", "postgres")
-	viper.SetDefault("database.postgres.password", "yahyasd56")
+	viper.SetDefault("database.postgres.password", "postgres")
 	viper.SetDefault("database.postgres.ssl_mode", "disable")
 	viper.SetDefault("database.postgres.max_open_conns", 25)
 	viper.SetDefault("database.postgres.max_idle_conns", 5)
 	viper.SetDefault("database.postgres.conn_max_lifetime", "5m")
 	viper.SetDefault("database.postgres.conn_max_idle_time", "1m")
+
+	// Redis defaults
+	viper.SetDefault("redis.host", "localhost")
+	viper.SetDefault("redis.port", 6379)
+	viper.SetDefault("redis.database", 0)
+	viper.SetDefault("redis.password", "")
 
 	// Logging defaults
 	viper.SetDefault("logging.level", "info")
@@ -786,38 +798,90 @@ func initConfig() error {
 	viper.SetDefault("processing.batch_size", 100)
 	viper.SetDefault("processing.worker_count", 5)
 	viper.SetDefault("processing.sentiment_trigger_threshold", 10)
+	viper.SetDefault("processing.retry_attempts", 3)
+	viper.SetDefault("processing.timeout_seconds", 30)
 
 	// News sources defaults
 	viper.SetDefault("news_sources.newsapi.api_key", "")
 	viper.SetDefault("news_sources.newsapi.base_url", "https://newsapi.org/v2")
+	viper.SetDefault("news_sources.newsapi.enabled", true)
 	viper.SetDefault("news_sources.twitter.bearer_token", "")
 	viper.SetDefault("news_sources.twitter.base_url", "https://api.twitter.com/2")
+	viper.SetDefault("news_sources.twitter.enabled", false)
 
-	// External services
+	// External services defaults
 	viper.SetDefault("external_services.nlp_service.grpc_endpoint", "localhost:50052")
 	viper.SetDefault("external_services.nlp_service.timeout", "30s")
 	viper.SetDefault("external_services.nlp_service.max_retry", 3)
 
-	// Redis defaults
-	viper.SetDefault("redis.host", "localhost")
-	viper.SetDefault("redis.port", 6379)
-	viper.SetDefault("redis.database", 0)
-	viper.SetDefault("redis.password", "")
+	// Bind environment variables explicitly
+	bindEnvVars()
 
-	viper.SetEnvPrefix("NEWS")
-	viper.AutomaticEnv()
-
+	// Try to read config file (optional - env vars will override)
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			logrus.Warn("Config file not found, using defaults")
+			logrus.Warn("Config file not found, using environment variables and defaults")
 		} else {
-			return fmt.Errorf("error reading config file: %w", err)
+			logrus.Warnf("Error reading config file: %v, using environment variables and defaults", err)
 		}
 	} else {
-		logrus.Infof("Loaded config file: %s", viper.ConfigFileUsed())
+		logrus.Infof("Using config file: %s", viper.ConfigFileUsed())
 	}
 
 	return nil
+}
+
+func bindEnvVars() {
+	// Server
+	viper.BindEnv("server.port", "SERVER_PORT")
+	viper.BindEnv("server.grpc_port", "GRPC_PORT")
+	viper.BindEnv("server.environment", "ENVIRONMENT")
+
+	// Database
+	viper.BindEnv("database.postgres.host", "POSTGRES_HOST")
+	viper.BindEnv("database.postgres.port", "POSTGRES_PORT")
+	viper.BindEnv("database.postgres.database", "POSTGRES_DB")
+	viper.BindEnv("database.postgres.username", "POSTGRES_USER")
+	viper.BindEnv("database.postgres.password", "POSTGRES_PASSWORD")
+	viper.BindEnv("database.postgres.ssl_mode", "DATABASE_SSL_MODE")
+	viper.BindEnv("database.postgres.max_open_conns", "DATABASE_MAX_OPEN_CONNS")
+	viper.BindEnv("database.postgres.max_idle_conns", "DATABASE_MAX_IDLE_CONNS")
+	viper.BindEnv("database.postgres.conn_max_lifetime", "DATABASE_CONN_MAX_LIFETIME")
+	viper.BindEnv("database.postgres.conn_max_idle_time", "DATABASE_CONN_MAX_IDLE_TIME")
+
+	// Redis
+	viper.BindEnv("redis.host", "REDIS_HOST")
+	viper.BindEnv("redis.port", "REDIS_PORT")
+	viper.BindEnv("redis.database", "REDIS_DATABASE")
+	viper.BindEnv("redis.password", "REDIS_PASSWORD")
+
+	// Logging
+	viper.BindEnv("logging.level", "LOG_LEVEL")
+	viper.BindEnv("logging.format", "LOG_FORMAT")
+
+	// Processing
+	viper.BindEnv("processing.enable_auto_ingestion", "PROCESSING_ENABLE_AUTO_INGESTION")
+	viper.BindEnv("processing.sentiment_trigger_threshold", "PROCESSING_SENTIMENT_TRIGGER_THRESHOLD")
+	viper.BindEnv("processing.rss_schedule", "PROCESSING_RSS_SCHEDULE")
+	viper.BindEnv("processing.newsapi_schedule", "PROCESSING_NEWSAPI_SCHEDULE")
+	viper.BindEnv("processing.cleanup_schedule", "PROCESSING_CLEANUP_SCHEDULE")
+	viper.BindEnv("processing.batch_size", "PROCESSING_BATCH_SIZE")
+	viper.BindEnv("processing.worker_count", "PROCESSING_WORKER_COUNT")
+	viper.BindEnv("processing.retry_attempts", "PROCESSING_RETRY_ATTEMPTS")
+	viper.BindEnv("processing.timeout_seconds", "PROCESSING_TIMEOUT_SECONDS")
+
+	// News Sources
+	viper.BindEnv("news_sources.newsapi.api_key", "NEWSAPI_API_KEY")
+	viper.BindEnv("news_sources.newsapi.base_url", "NEWSAPI_BASE_URL")
+	viper.BindEnv("news_sources.newsapi.enabled", "NEWSAPI_ENABLED")
+	viper.BindEnv("news_sources.twitter.bearer_token", "TWITTER_BEARER_TOKEN")
+	viper.BindEnv("news_sources.twitter.base_url", "TWITTER_BASE_URL")
+	viper.BindEnv("news_sources.twitter.enabled", "TWITTER_ENABLED")
+
+	// External Services
+	viper.BindEnv("external_services.nlp_service.grpc_endpoint", "NLP_SERVICE_ENDPOINT")
+	viper.BindEnv("external_services.nlp_service.timeout", "NLP_SERVICE_TIMEOUT")
+	viper.BindEnv("external_services.nlp_service.max_retry", "NLP_SERVICE_MAX_RETRY")
 }
 
 func initLogger() {

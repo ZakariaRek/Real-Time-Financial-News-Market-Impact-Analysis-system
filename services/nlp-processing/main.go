@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -165,27 +166,101 @@ func main() {
 }
 
 func initConfig() error {
+	// Set up viper to read from config file
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("./config")
 	viper.AddConfigPath(".")
 
+	// Enable reading from environment variables
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
 	// Set defaults
 	viper.SetDefault("server.port", 4002)
+	viper.SetDefault("server.environment", "development")
 	viper.SetDefault("grpc.port", 50052)
 	viper.SetDefault("grpc.max_receive_message_size", 4194304) // 4MB
 	viper.SetDefault("grpc.max_send_message_size", 4194304)
 	viper.SetDefault("processing.worker_count", 3)
 	viper.SetDefault("processing.batch_size", 50)
+	viper.SetDefault("processing.retry_attempts", 3)
+	viper.SetDefault("processing.timeout_seconds", 60)
 	viper.SetDefault("redis.host", "localhost")
 	viper.SetDefault("redis.port", 6379)
 	viper.SetDefault("redis.database", 1)
+	viper.SetDefault("redis.password", "")
+	viper.SetDefault("database.postgres.host", "localhost")
+	viper.SetDefault("database.postgres.port", 5432)
+	viper.SetDefault("database.postgres.database", "nlp_processing")
+	viper.SetDefault("database.postgres.username", "postgres")
+	viper.SetDefault("database.postgres.password", "postgres")
+	viper.SetDefault("database.postgres.ssl_mode", "disable")
+	viper.SetDefault("database.postgres.max_open_conns", 30)
+	viper.SetDefault("database.postgres.max_idle_conns", 10)
+	viper.SetDefault("logging.level", "info")
+	viper.SetDefault("logging.format", "json")
+	viper.SetDefault("external_services.news_ingestion_service.grpc_endpoint", "localhost:50051")
+	viper.SetDefault("external_services.news_ingestion_service.timeout", "30s")
 
+	// Try to read config file (optional - env vars will override)
 	if err := viper.ReadInConfig(); err != nil {
-		logrus.Warnf("Config file not found, using defaults: %v", err)
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			logrus.Warn("Config file not found, using environment variables and defaults")
+		} else {
+			logrus.Warnf("Error reading config file: %v, using environment variables and defaults", err)
+		}
+	} else {
+		logrus.Infof("Using config file: %s", viper.ConfigFileUsed())
 	}
 
+	// Bind environment variables explicitly
+	bindEnvVars()
+
 	return nil
+}
+
+func bindEnvVars() {
+	// Server
+	viper.BindEnv("server.port", "SERVER_PORT")
+	viper.BindEnv("server.environment", "ENVIRONMENT")
+
+	// Database
+	viper.BindEnv("database.postgres.host", "POSTGRES_HOST")
+	viper.BindEnv("database.postgres.port", "POSTGRES_PORT")
+	viper.BindEnv("database.postgres.database", "POSTGRES_DB")
+	viper.BindEnv("database.postgres.username", "POSTGRES_USER")
+	viper.BindEnv("database.postgres.password", "POSTGRES_PASSWORD")
+	viper.BindEnv("database.postgres.ssl_mode", "DATABASE_SSL_MODE")
+	viper.BindEnv("database.postgres.max_open_conns", "DATABASE_MAX_OPEN_CONNS")
+	viper.BindEnv("database.postgres.max_idle_conns", "DATABASE_MAX_IDLE_CONNS")
+	viper.BindEnv("database.postgres.conn_max_lifetime", "DATABASE_CONN_MAX_LIFETIME")
+	viper.BindEnv("database.postgres.conn_max_idle_time", "DATABASE_CONN_MAX_IDLE_TIME")
+
+	// Redis
+	viper.BindEnv("redis.host", "REDIS_HOST")
+	viper.BindEnv("redis.port", "REDIS_PORT")
+	viper.BindEnv("redis.database", "REDIS_DATABASE")
+	viper.BindEnv("redis.password", "REDIS_PASSWORD")
+
+	// Logging
+	viper.BindEnv("logging.level", "LOG_LEVEL")
+	viper.BindEnv("logging.format", "LOG_FORMAT")
+
+	// Processing
+	viper.BindEnv("processing.worker_count", "PROCESSING_WORKER_COUNT")
+	viper.BindEnv("processing.batch_size", "PROCESSING_BATCH_SIZE")
+	viper.BindEnv("processing.retry_attempts", "PROCESSING_RETRY_ATTEMPTS")
+	viper.BindEnv("processing.timeout_seconds", "PROCESSING_TIMEOUT_SECONDS")
+
+	// gRPC
+	viper.BindEnv("grpc.port", "GRPC_PORT")
+	viper.BindEnv("grpc.max_receive_message_size", "GRPC_MAX_RECEIVE_MESSAGE_SIZE")
+	viper.BindEnv("grpc.max_send_message_size", "GRPC_MAX_SEND_MESSAGE_SIZE")
+
+	// External Services
+	viper.BindEnv("external_services.news_ingestion_service.grpc_endpoint", "NEWS_INGESTION_ENDPOINT")
+	viper.BindEnv("external_services.news_ingestion_service.timeout", "NEWS_INGESTION_TIMEOUT")
 }
 
 func initLogger() {
