@@ -1,6 +1,4 @@
-# Dockerfile.jar-only for AlertSignal
-# Build JAR first: ./mvnw clean package -DskipTests
-# Then build image: docker build -f Dockerfile.jar-only -t alertsignal:latest .
+
 
 FROM eclipse-temurin:21-jre-alpine
 
