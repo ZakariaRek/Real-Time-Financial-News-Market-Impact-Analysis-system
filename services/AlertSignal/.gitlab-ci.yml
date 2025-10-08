@@ -7,16 +7,20 @@ workflow:
 
 stages:
   - test
+  - build
+  - docker
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
   SERVICE_DIR: "services/AlertSignal"
+  DOCKER_IMAGE: "yahyazakaria123/alertsignal"
 
 cache:
   key: alertsignal-cache
   paths:
     - $SERVICE_DIR/.m2/repository
 
+# ==================== TEST STAGE ====================
 test:
   stage: test
   image: maven:3.9-eclipse-temurin-21
@@ -31,3 +35,49 @@ test:
         - $SERVICE_DIR/target/surefire-reports/TEST-*.xml
   tags:
     - docker
+
+# ==================== BUILD STAGE ====================
+build:
+  stage: build
+  image: maven:3.9-eclipse-temurin-21
+  script:
+    - cd $SERVICE_DIR
+    - echo "Building JAR for AlertSignal service"
+    - mvn clean package -DskipTests
+  artifacts:
+    paths:
+      - $SERVICE_DIR/target/*.jar
+    expire_in: 1 day
+  tags:
+    - docker
+  only:
+    - main
+    - develop
+
+# ==================== DOCKER STAGE ====================
+docker-build-push:
+  stage: docker
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - echo "Logging into Docker Hub..."
+    - echo $DOCKERHUB_PASSWORD | docker login -u $DOCKERHUB_USERNAME --password-stdin
+  script:
+    - cd $SERVICE_DIR
+    - echo "Building Docker image..."
+    - docker build -f Dockerfile -t $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA .
+    - docker build -f Dockerfile -t $DOCKER_IMAGE:latest .
+    - echo "Pushing to Docker Hub..."
+    - docker push $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $DOCKER_IMAGE:latest
+    - echo "Successfully pushed $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - echo "Successfully pushed $DOCKER_IMAGE:latest"
+  after_script:
+    - docker logout
+  dependencies:
+    - build
+  tags:
+    - docker
+  only:
+    - main
