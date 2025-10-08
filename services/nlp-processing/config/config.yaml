@@ -1,6 +1,6 @@
 server:
-  port: 4002
-  environment: development
+  port: ${SERVER_PORT:4002}
+  environment: ${ENVIRONMENT:development}
 
 database:
   # PostgreSQL configuration for NLP Processing Service
@@ -8,48 +8,43 @@ database:
   # But implementing PostgreSQL as requested for consistency
   # For production with high-volume analytics, consider ClickHouse on AWS
   postgres:
-    host: localhost          # For prod: your-nlp-rds-endpoint.region.rds.amazonaws.com
-    port: 5432
-    database: nlp_processing
-    username: postgres
-    password: yahyasd56
-    # AWS RDS specific settings for production
-    # ssl_mode: require
-    # max_open_conns: 30
-    # max_idle_conns: 10
-    # conn_max_lifetime: 5m
-    # conn_max_idle_time: 2m
+    host: ${POSTGRES_HOST:localhost}
+    port: ${POSTGRES_PORT:5432}
+    database: ${POSTGRES_DB:nlp_processing}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
+    ssl_mode: ${DATABASE_SSL_MODE:disable}
+    max_open_conns: ${DATABASE_MAX_OPEN_CONNS:30}
+    max_idle_conns: ${DATABASE_MAX_IDLE_CONNS:10}
+    conn_max_lifetime: ${DATABASE_CONN_MAX_LIFETIME:5m}
+    conn_max_idle_time: ${DATABASE_CONN_MAX_IDLE_TIME:2m}
 
 redis:
-  host: localhost
-  port: 6379
-  database: 1
-  password: ""
+  host: ${REDIS_HOST:localhost}
+  port: ${REDIS_PORT:6379}
+  database: ${REDIS_DATABASE:1}
+  password: ${REDIS_PASSWORD:}
 
 logging:
-  level: info
-  format: json
-
+  level: ${LOG_LEVEL:info}
+  format: ${LOG_FORMAT:json}
 
 processing:
-  batch_size: 50
-  worker_count: 3
-  retry_attempts: 3
-  timeout_seconds: 60
-  enable_auto_ingestion: true
-  sentiment_trigger_threshold: 10  # Trigger when >= 10 pending articles
-  rss_schedule: "0 */2 * * * *"
-  newsapi_schedule: "0 */7 * * * *"
+  batch_size: ${PROCESSING_BATCH_SIZE:50}
+  worker_count: ${PROCESSING_WORKER_COUNT:3}
+  retry_attempts: ${PROCESSING_RETRY_ATTEMPTS:3}
+  timeout_seconds: ${PROCESSING_TIMEOUT_SECONDS:60}
+  enable_auto_ingestion: ${PROCESSING_ENABLE_AUTO_INGESTION:true}
+  sentiment_trigger_threshold: ${PROCESSING_SENTIMENT_TRIGGER_THRESHOLD:10}
+  rss_schedule: ${PROCESSING_RSS_SCHEDULE:0 */2 * * * *}
+  newsapi_schedule: ${PROCESSING_NEWSAPI_SCHEDULE:0 */7 * * * *}
 
 grpc:
-  port: 50052
-  max_receive_message_size: 4194304  # 4MB
-  max_send_message_size: 4194304
-
-# services/news-ingestion/config/config.yaml
-
+  port: ${GRPC_PORT:50052}
+  max_receive_message_size: ${GRPC_MAX_RECEIVE_MESSAGE_SIZE:4194304}
+  max_send_message_size: ${GRPC_MAX_SEND_MESSAGE_SIZE:4194304}
 
 external_services:
   news_ingestion_service:
-    grpc_endpoint: "localhost:50051"
-    timeout: "30s"
+    grpc_endpoint: ${NEWS_INGESTION_ENDPOINT:localhost:50051}
+    timeout: ${NEWS_INGESTION_TIMEOUT:30s}
