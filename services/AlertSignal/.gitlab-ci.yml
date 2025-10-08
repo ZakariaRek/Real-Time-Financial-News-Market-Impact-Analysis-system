@@ -1,0 +1,33 @@
+workflow:
+  rules:
+    - changes:
+        - services/AlertSignal/**/*
+      when: always
+    - when: never
+
+stages:
+  - test
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  SERVICE_DIR: "services/AlertSignal"
+
+cache:
+  key: alertsignal-cache
+  paths:
+    - $SERVICE_DIR/.m2/repository
+
+test:
+  stage: test
+  image: maven:3.9-eclipse-temurin-21
+  script:
+    - cd $SERVICE_DIR
+    - echo "Running tests for AlertSignal service"
+    - mvn clean test
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - $SERVICE_DIR/target/surefire-reports/TEST-*.xml
+  tags:
+    - docker
