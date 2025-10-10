@@ -35,7 +35,7 @@ test:
   tags:
     - docker
 
-# ==================== BUILD STAGE ====================
+# ========BUILD STAG===================
 build:
   stage: build
   image: maven:3.9-eclipse-temurin-21
