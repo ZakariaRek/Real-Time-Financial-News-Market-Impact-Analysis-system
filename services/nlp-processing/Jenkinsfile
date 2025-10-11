@@ -1,0 +1,199 @@
+pipeline {
+    agent any
+
+    triggers {
+        githubPush()
+    }
+
+    environment {
+        DOCKER_IMAGE = "yahyazakaria123/market-impact-analysis-system-nlp-processing-service"
+        DOCKER_CREDENTIALS_ID = "dockerhub-credentials"
+        GIT_CREDENTIALS_ID = "github-gitops-credentials	"
+        BUILD_CONTEXT = "services/nlp-processing"
+        GITOPS_BRANCH = "nlp-processing-image-updates"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system',
+                        credentialsId: env.GIT_CREDENTIALS_ID
+                    ]],
+                    extensions: [
+                        [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [[path: 'services/nlp-processing/']]]
+                    ]
+                ])
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo 'Building Docker image (multi-stage build with Go compilation)...'
+                dir("${BUILD_CONTEXT}") {
+                    bat """
+                        docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                        docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                    """
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                echo 'Pushing Docker image to Docker Hub...'
+                script {
+                    withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}",
+                                                      usernameVariable: 'DOCKER_USER',
+                                                      passwordVariable: 'DOCKER_PASS')]) {
+                        bat """
+                            docker login -u %DOCKER_USER% -p %DOCKER_PASS%
+                            docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                            docker push ${DOCKER_IMAGE}:latest
+                            docker logout
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Update GitOps Repo') {
+            steps {
+                echo 'Updating HelmRelease in GitOps repository...'
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'github-gitops-credentials',
+                                                      usernameVariable: 'GIT_USER',
+                                                      passwordVariable: 'GIT_TOKEN')]) {
+                       bat """
+    REM Clone GitOps repository
+    if exist gitops-repo rmdir /s /q gitops-repo
+    echo Cloning repository...
+    git clone https://%GIT_TOKEN%@github.com/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system.git gitops-repo
+    if errorlevel 1 (
+        echo ERROR: Failed to clone repository
+        exit /b 1
+    )
+
+    cd gitops-repo
+
+    REM Configure Git
+    echo Configuring Git...
+    git config user.email "jenkins@automation.com"
+    git config user.name "Jenkins CI"
+
+    REM Check if branch exists remotely
+    git fetch origin
+    git branch -r | findstr /C:"origin/${GITOPS_BRANCH}" > nul
+    if errorlevel 1 (
+        echo Branch does not exist remotely, creating new branch...
+        git checkout -b ${GITOPS_BRANCH}
+    ) else (
+        echo Branch exists, checking out and updating...
+        git checkout ${GITOPS_BRANCH}
+        git pull origin ${GITOPS_BRANCH}
+    )
+
+    REM Update image tag in HelmRelease using PowerShell
+    echo Updating nlpProcessing image tag to ${BUILD_NUMBER} in HelmRelease...
+    powershell -Command "\$content = Get-Content 'clusters/production/helmrelease.yaml' -Raw; \$pattern = '(nlpProcessing:[\\s\\S]*?image:[\\s\\S]*?tag:\\s*)\\S+'; \$replacement = '\${1}${BUILD_NUMBER}'; \$content = \$content -replace \$pattern, \$replacement; Set-Content 'clusters/production/helmrelease.yaml' -Value \$content -NoNewline"
+    if errorlevel 1 (
+        echo ERROR: Failed to update HelmRelease file
+        exit /b 1
+    )
+
+    REM Verify the change
+    echo Verifying update...
+    powershell -Command "\$yaml = Get-Content 'clusters/production/helmrelease.yaml' -Raw; if (\$yaml -match 'nlpProcessing:[\\s\\S]*?tag:\\s*(\\S+)') { Write-Host 'Updated tag:' \$matches[1] }"
+
+    REM Check if there are changes
+    git status
+    git diff clusters/production/helmrelease.yaml
+
+    REM Check if there are actual changes to commit
+    git diff --quiet clusters/production/helmrelease.yaml
+    if errorlevel 1 (
+        REM Changes exist, commit them
+        echo Committing changes...
+        git add clusters/production/helmrelease.yaml
+        git commit -m "chore: update nlp-processing image to build ${BUILD_NUMBER}" -m "Automated update by Jenkins CI" -m "Image: ${DOCKER_IMAGE}:${BUILD_NUMBER}" -m "Build URL: ${BUILD_URL}"
+
+        REM Push to branch (force push to update existing branch)
+        echo Pushing changes to ${GITOPS_BRANCH}...
+        git push -f origin ${GITOPS_BRANCH}
+        if errorlevel 1 (
+            echo ERROR: Failed to push branch
+            exit /b 1
+        )
+        echo Changes pushed successfully!
+    ) else (
+        echo No changes detected, skipping commit
+    )
+
+    REM Check if PR already exists
+    echo Checking for existing Pull Request...
+    curl -s -H "Authorization: token %GIT_TOKEN%" ^
+      -H "Accept: application/vnd.github.v3+json" ^
+      "https://api.github.com/repos/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/pulls?head=Saoudyahya:${GITOPS_BRANCH}&state=open" ^
+      -o pr-check.json
+
+    powershell -Command "\$prList = Get-Content 'pr-check.json' | ConvertFrom-Json; if (\$prList.Count -eq 0) { exit 1 } else { exit 0 }"
+    if errorlevel 1 (
+        REM No PR exists, create new one using PowerShell
+        echo No existing PR found, creating new Pull Request...
+        powershell -Command "\$headers = @{ Authorization = 'token %GIT_TOKEN%'; Accept = 'application/vnd.github.v3+json'; 'Content-Type' = 'application/json' }; \$body = @{ title = '[NLP Processing] Update Image to Build ${BUILD_NUMBER}'; body = '## Automated Image Update' + [Environment]::NewLine + [Environment]::NewLine + '**Service:** NLP Processing Service' + [Environment]::NewLine + '**Current Image Tag:** ${BUILD_NUMBER}' + [Environment]::NewLine + '**Docker Image:** ${DOCKER_IMAGE}:${BUILD_NUMBER}' + [Environment]::NewLine + [Environment]::NewLine + '### Changes' + [Environment]::NewLine + '- Updated nlpProcessing.image.tag in HelmRelease to ${BUILD_NUMBER}' + [Environment]::NewLine + [Environment]::NewLine + '### Build Information' + [Environment]::NewLine + '- **Jenkins Build:** ${BUILD_URL}' + [Environment]::NewLine + '- **Build Number:** ${BUILD_NUMBER}' + [Environment]::NewLine + [Environment]::NewLine + '### Deployment' + [Environment]::NewLine + 'Flux will automatically sync this change once merged.' + [Environment]::NewLine + [Environment]::NewLine + 'Review Required: Please review and approve before merging.' + [Environment]::NewLine + [Environment]::NewLine + 'This PR is automatically updated with each new build.'; head = '${GITOPS_BRANCH}'; base = 'main' } | ConvertTo-Json; try { \$response = Invoke-RestMethod -Uri 'https://api.github.com/repos/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/pulls' -Method Post -Headers \$headers -Body \$body; Write-Host 'PR created successfully'; Write-Host ('PR URL: ' + \$response.html_url) } catch { Write-Host ('Error: ' + \$_.Exception.Message); exit 1 }"
+        if errorlevel 1 (
+            echo ERROR: Failed to create Pull Request
+            exit /b 1
+        )
+    ) else (
+        echo Pull Request already exists and has been updated with new changes
+        REM Add a comment to the existing PR
+        powershell -Command "\$prList = Get-Content 'pr-check.json' | ConvertFrom-Json; \$prNumber = \$prList[0].number; Write-Host 'Existing PR Number:' \$prNumber; \$prNumber | Out-File -FilePath 'pr-number.txt' -NoNewline"
+        set /p PR_NUMBER=<pr-number.txt
+
+        echo Adding comment to PR #%PR_NUMBER%...
+        powershell -Command "\$headers = @{ Authorization = 'token %GIT_TOKEN%'; Accept = 'application/vnd.github.v3+json'; 'Content-Type' = 'application/json' }; \$body = @{ body = '### Updated to Build ${BUILD_NUMBER}' + [Environment]::NewLine + [Environment]::NewLine + '- **Image:** ${DOCKER_IMAGE}:${BUILD_NUMBER}' + [Environment]::NewLine + '- **Jenkins Build:** ${BUILD_URL}' + [Environment]::NewLine + '- **Build Number:** ${BUILD_NUMBER}' } | ConvertTo-Json; try { Invoke-RestMethod -Uri 'https://api.github.com/repos/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/issues/%PR_NUMBER%/comments' -Method Post -Headers \$headers -Body \$body; Write-Host 'Comment added successfully' } catch { Write-Host ('Error: ' + \$_.Exception.Message) }"
+    )
+
+    REM Cleanup
+    cd ..
+    rmdir /s /q gitops-repo
+
+    echo ========================================
+    echo Process completed!
+    echo Branch: ${GITOPS_BRANCH}
+    echo Check PR at: https://github.com/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/pulls
+    echo ========================================
+"""
+                    }
+                }
+            }
+        }
+
+        stage('Cleanup') {
+            steps {
+                echo 'Cleaning up local Docker images...'
+                bat """
+                    docker rmi ${DOCKER_IMAGE}:${BUILD_NUMBER} 2>nul || echo Image not found
+                    docker rmi ${DOCKER_IMAGE}:latest 2>nul || echo Image not found
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline succeeded! Image pushed: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
+            echo "Docker Hub: https://hub.docker.com/r/yahyazakaria123/market-impact-analysis-system-nlp-processing-service"
+            echo "GitOps branch: ${GITOPS_BRANCH}"
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
