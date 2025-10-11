@@ -28,7 +28,7 @@ spring:
 
   # Database Configuration
   datasource:
-    url: jdbc:postgresql://localhost:5432/market_impact?currentSchema=public
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/market_impact?currentSchema=public}
     username: ${DB_USERNAME:postgres}
     # password: ${DB_PASSWORD:zakaria}
     password: ${DB_PASSWORD:yahyasd56}
