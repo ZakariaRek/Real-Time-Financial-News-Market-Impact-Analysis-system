@@ -1,31 +1,23 @@
 pipeline {
     agent any
 
-    triggers {
-        githubPush()
+    tools {
+        jdk 'jdk-21'
     }
 
     environment {
         DOCKER_IMAGE = "yahyazakaria123/market-impact-analysis-system-news-ingestion-service"
-        DOCKER_CREDENTIALS_ID = "dockerhub-credentials"
-        GIT_CREDENTIALS_ID = "github-gitops-credentials	"  // Add your GitHub credentials ID or remove if repo is public
+        DOCKER_CREDENTIALS_ID = "yahya.zakaria-dockerhub"  // ✅ FIXED
         BUILD_CONTEXT = "services/news-ingestion"
         GITOPS_BRANCH = "news-ingestion-image-updates"
     }
 
     stages {
-        stage('Checkout') {
+        stage('Clone from GitHub') {
             steps {
-                checkout([$class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system',
-                        credentialsId: env.GIT_CREDENTIALS_ID
-                    ]],
-                    extensions: [
-                        [$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [[path: 'services/news-ingestion/']]]
-                    ]
-                ])
+                echo 'Cloning repository from GitHub...'
+                git branch: 'main',
+                    url: 'https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system'
             }
         }
 
@@ -83,88 +75,117 @@ pipeline {
     git config user.email "jenkins@automation.com"
     git config user.name "Jenkins CI"
 
-    REM Check if branch exists remotely
+    REM Checkout main and pull latest changes
+    echo.
+    echo ==========================================
+    echo Pulling latest changes from main branch...
+    echo ==========================================
+    git checkout main
+    git pull origin main
+    if errorlevel 1 (
+        echo ERROR: Failed to pull from main branch
+        exit /b 1
+    )
+    echo Successfully updated from main branch
+
+    REM Now create/update feature branch from main
+    echo.
+    echo Creating/updating feature branch from main...
     git fetch origin
     git branch -r | findstr /C:"origin/${GITOPS_BRANCH}" > nul
     if errorlevel 1 (
-        echo Branch does not exist remotely, creating new branch...
+        echo Branch does not exist remotely, creating new branch from main...
         git checkout -b ${GITOPS_BRANCH}
     ) else (
-        echo Branch exists, checking out and updating...
+        echo Branch exists remotely, checking out and rebasing on main...
         git checkout ${GITOPS_BRANCH}
-        git pull origin ${GITOPS_BRANCH}
+        git rebase main
+        if errorlevel 1 (
+            echo WARNING: Rebase had conflicts, aborting rebase and using main as base
+            git rebase --abort
+            git checkout main
+            git branch -D ${GITOPS_BRANCH}
+            git checkout -b ${GITOPS_BRANCH}
+        ) else (
+            echo Successfully rebased on main
+        )
     )
 
-    REM Update image tag in HelmRelease using PowerShell
-    echo Updating newsIngestion image tag to ${BUILD_NUMBER} in HelmRelease...
-    powershell -Command "\$content = Get-Content 'clusters/production/helmrelease.yaml' -Raw; \$pattern = '(newsIngestion:[\\s\\S]*?image:[\\s\\S]*?tag:\\s*)\\S+'; \$replacement = '\${1}${BUILD_NUMBER}'; \$content = \$content -replace \$pattern, \$replacement; Set-Content 'clusters/production/helmrelease.yaml' -Value \$content -NoNewline"
+    REM Update image tag using line-by-line processing with proper quote handling
+    echo.
+    echo Updating newsIngestion image tag to "${BUILD_NUMBER}" in HelmRelease...
+    powershell -Command "\$filePath = 'clusters/production/helmrelease.yaml'; \$lines = Get-Content \$filePath; \$inNewsIngestion = \$false; \$inImage = \$false; \$updated = \$false; \$quote = [char]34; for (\$i = 0; \$i -lt \$lines.Count; \$i++) { \$line = \$lines[\$i]; if (\$line -match '^\\s*newsIngestion:\\s*\$') { \$inNewsIngestion = \$true; Write-Host \"Found newsIngestion section at line \$(\$i+1)\" } elseif (\$inNewsIngestion -and \$line -match '^\\s*image:\\s*\$') { \$inImage = \$true; Write-Host \"Found image section at line \$(\$i+1)\" } elseif (\$inNewsIngestion -and \$inImage -and \$line -match '^(\\s*tag:\\s*)(.+)\$') { \$indent = \$matches[1]; \$lines[\$i] = \$indent + \$quote + '${BUILD_NUMBER}' + \$quote; Write-Host \"Updated tag at line \$(\$i+1): [\$(\$lines[\$i])]\" -ForegroundColor Green; \$updated = \$true; break } elseif (\$line -match '^\\s*\\w+:\\s*\$' -and -not (\$line -match '^\\s*image:\\s*\$')) { \$inImage = \$false; if (\$line -notmatch '^\\s*(repository|tag|enabled|replicaCount):\\s*') { \$inNewsIngestion = \$false } } }; if (\$updated) { \$lines | Set-Content \$filePath -Encoding UTF8; Write-Host 'File updated successfully' -ForegroundColor Green; exit 0 } else { Write-Host 'ERROR: Could not find newsIngestion tag line to update' -ForegroundColor Red; exit 1 }"
     if errorlevel 1 (
         echo ERROR: Failed to update HelmRelease file
         exit /b 1
     )
 
-    REM Verify the change
+    REM Verify by checking git changes and displaying the updated tag
+    echo.
     echo Verifying update...
-    powershell -Command "\$yaml = Get-Content 'clusters/production/helmrelease.yaml' -Raw; if (\$yaml -match 'newsIngestion:[\\s\\S]*?tag:\\s*(\\S+)') { Write-Host 'Updated tag:' \$matches[1] }"
-
-    REM Check if there are changes
-    git status
-    git diff clusters/production/helmrelease.yaml
-
-    REM Check if there are actual changes to commit
     git diff --quiet clusters/production/helmrelease.yaml
-    if errorlevel 1 (
-        REM Changes exist, commit them
-        echo Committing changes...
-        git add clusters/production/helmrelease.yaml
-        git commit -m "chore: update news-ingestion image to build ${BUILD_NUMBER}" -m "Automated update by Jenkins CI" -m "Image: ${DOCKER_IMAGE}:${BUILD_NUMBER}" -m "Build URL: ${BUILD_URL}"
-
-        REM Push to branch (force push to update existing branch)
-        echo Pushing changes to ${GITOPS_BRANCH}...
-        git push -f origin ${GITOPS_BRANCH}
-        if errorlevel 1 (
-            echo ERROR: Failed to push branch
-            exit /b 1
-        )
-        echo Changes pushed successfully!
-    ) else (
-        echo No changes detected, skipping commit
+    if not errorlevel 1 (
+        echo ERROR: No changes detected in helmrelease.yaml
+        exit /b 1
     )
+    echo SUCCESS: Changes detected in helmrelease.yaml
+    echo Updated tag line:
+    powershell -Command "Get-Content 'clusters/production/helmrelease.yaml' | Select-String 'newsIngestion:' -Context 0,10 | Select-String 'tag:' | Select-Object -First 1"
+
+    REM Show what changed
+    echo.
+    echo ==========================================
+    echo Changes to be committed:
+    echo ==========================================
+    git diff clusters/production/helmrelease.yaml
+    echo ==========================================
+
+    REM Commit and push changes
+    echo.
+    echo Committing changes...
+    git add clusters/production/helmrelease.yaml
+    git commit -m "chore: update news-ingestion image to build ${BUILD_NUMBER}" -m "Automated update by Jenkins CI" -m "Image: ${DOCKER_IMAGE}:${BUILD_NUMBER}" -m "Build URL: ${BUILD_URL}"
+
+    echo Pushing changes to ${GITOPS_BRANCH}...
+    git push -f origin ${GITOPS_BRANCH}
+    if errorlevel 1 (
+        echo ERROR: Failed to push branch
+        exit /b 1
+    )
+    echo Changes pushed successfully!
 
     REM Check if PR already exists
+    echo.
     echo Checking for existing Pull Request...
     curl -s -H "Authorization: token %GIT_TOKEN%" ^
       -H "Accept: application/vnd.github.v3+json" ^
       "https://api.github.com/repos/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/pulls?head=Saoudyahya:${GITOPS_BRANCH}&state=open" ^
       -o pr-check.json
 
-    powershell -Command "\$prList = Get-Content 'pr-check.json' | ConvertFrom-Json; if (\$prList.Count -eq 0) { exit 1 } else { exit 0 }"
+    powershell -Command "\$prList = Get-Content 'pr-check.json' -Raw | ConvertFrom-Json; if (\$prList -is [array] -and \$prList.Count -gt 0) { exit 0 } else { exit 1 }"
     if errorlevel 1 (
-        REM No PR exists, create new one using PowerShell
+        REM No PR exists, create new one
         echo No existing PR found, creating new Pull Request...
-        powershell -Command "\$headers = @{ Authorization = 'token %GIT_TOKEN%'; Accept = 'application/vnd.github.v3+json'; 'Content-Type' = 'application/json' }; \$body = @{ title = '[News Ingestion] Update Image to Build ${BUILD_NUMBER}'; body = '## Automated Image Update' + [Environment]::NewLine + [Environment]::NewLine + '**Service:** News Ingestion Service' + [Environment]::NewLine + '**Current Image Tag:** ${BUILD_NUMBER}' + [Environment]::NewLine + '**Docker Image:** ${DOCKER_IMAGE}:${BUILD_NUMBER}' + [Environment]::NewLine + [Environment]::NewLine + '### Changes' + [Environment]::NewLine + '- Updated newsIngestion.image.tag in HelmRelease to ${BUILD_NUMBER}' + [Environment]::NewLine + [Environment]::NewLine + '### Build Information' + [Environment]::NewLine + '- **Jenkins Build:** ${BUILD_URL}' + [Environment]::NewLine + '- **Build Number:** ${BUILD_NUMBER}' + [Environment]::NewLine + [Environment]::NewLine + '### Deployment' + [Environment]::NewLine + 'Flux will automatically sync this change once merged.' + [Environment]::NewLine + [Environment]::NewLine + 'Review Required: Please review and approve before merging.' + [Environment]::NewLine + [Environment]::NewLine + 'This PR is automatically updated with each new build.'; head = '${GITOPS_BRANCH}'; base = 'main' } | ConvertTo-Json; try { \$response = Invoke-RestMethod -Uri 'https://api.github.com/repos/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/pulls' -Method Post -Headers \$headers -Body \$body; Write-Host 'PR created successfully'; Write-Host ('PR URL: ' + \$response.html_url) } catch { Write-Host ('Error: ' + \$_.Exception.Message); exit 1 }"
-        if errorlevel 1 (
-            echo ERROR: Failed to create Pull Request
-            exit /b 1
-        )
+        powershell -Command "\$headers = @{ Authorization = 'token %GIT_TOKEN%'; Accept = 'application/vnd.github.v3+json'; 'Content-Type' = 'application/json' }; \$body = @{ title = '[News Ingestion] Update Image to Build ${BUILD_NUMBER}'; body = '## 🚀 Automated Image Update' + [Environment]::NewLine + [Environment]::NewLine + '**Service:** News Ingestion Service' + [Environment]::NewLine + '**New Image Tag:** `\"${BUILD_NUMBER}\"`' + [Environment]::NewLine + '**Docker Image:** `${DOCKER_IMAGE}:${BUILD_NUMBER}`' + [Environment]::NewLine + [Environment]::NewLine + '### 📝 Changes' + [Environment]::NewLine + '- Updated `newsIngestion.image.tag` to `\"${BUILD_NUMBER}\"`' + [Environment]::NewLine + [Environment]::NewLine + '### 🔨 Build Information' + [Environment]::NewLine + '- **Jenkins Build:** ${BUILD_URL}' + [Environment]::NewLine + '- **Build Number:** #${BUILD_NUMBER}' + [Environment]::NewLine + [Environment]::NewLine + '---' + [Environment]::NewLine + '✅ **Review and approve before merging.**'; head = '${GITOPS_BRANCH}'; base = 'main' } | ConvertTo-Json -Depth 10; try { \$response = Invoke-RestMethod -Uri 'https://api.github.com/repos/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/pulls' -Method Post -Headers \$headers -Body \$body; Write-Host 'PR created successfully!'; Write-Host ('PR URL: ' + \$response.html_url); exit 0 } catch { Write-Host ('Error creating PR: ' + \$_.Exception.Message); if (\$_.Exception.Response.StatusCode -eq 422) { Write-Host 'PR may already exist or validation error occurred' }; exit 0 }"
     ) else (
-        echo Pull Request already exists and has been updated with new changes
-        REM Add a comment to the existing PR
-        powershell -Command "\$prList = Get-Content 'pr-check.json' | ConvertFrom-Json; \$prNumber = \$prList[0].number; Write-Host 'Existing PR Number:' \$prNumber; \$prNumber | Out-File -FilePath 'pr-number.txt' -NoNewline"
+        echo Pull Request already exists
+        powershell -Command "\$prList = Get-Content 'pr-check.json' -Raw | ConvertFrom-Json; if (\$prList -is [array]) { \$prNumber = \$prList[0].number } else { \$prNumber = \$prList.number }; \$prNumber | Out-File 'pr-number.txt' -NoNewline"
         set /p PR_NUMBER=<pr-number.txt
-
         echo Adding comment to PR #%PR_NUMBER%...
-        powershell -Command "\$headers = @{ Authorization = 'token %GIT_TOKEN%'; Accept = 'application/vnd.github.v3+json'; 'Content-Type' = 'application/json' }; \$body = @{ body = '### Updated to Build ${BUILD_NUMBER}' + [Environment]::NewLine + [Environment]::NewLine + '- **Image:** ${DOCKER_IMAGE}:${BUILD_NUMBER}' + [Environment]::NewLine + '- **Jenkins Build:** ${BUILD_URL}' + [Environment]::NewLine + '- **Build Number:** ${BUILD_NUMBER}' } | ConvertTo-Json; try { Invoke-RestMethod -Uri 'https://api.github.com/repos/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/issues/%PR_NUMBER%/comments' -Method Post -Headers \$headers -Body \$body; Write-Host 'Comment added successfully' } catch { Write-Host ('Error: ' + \$_.Exception.Message) }"
+        powershell -Command "\$headers = @{ Authorization = 'token %GIT_TOKEN%'; 'Content-Type' = 'application/json' }; \$body = @{ body = '### 🔄 Updated to Build ${BUILD_NUMBER}' + [Environment]::NewLine + [Environment]::NewLine + '- **Image:** `${DOCKER_IMAGE}:${BUILD_NUMBER}`' + [Environment]::NewLine + '- **Jenkins Build:** ${BUILD_URL}' + [Environment]::NewLine + '- **Timestamp:** ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') } | ConvertTo-Json; Invoke-RestMethod -Uri 'https://api.github.com/repos/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/issues/%PR_NUMBER%/comments' -Method Post -Headers \$headers -Body \$body | Out-Null; Write-Host 'Comment added successfully'"
     )
 
     REM Cleanup
     cd ..
     rmdir /s /q gitops-repo
 
+    echo.
     echo ========================================
-    echo Process completed!
+    echo ✅ GitOps Update Process Completed!
+    echo ========================================
     echo Branch: ${GITOPS_BRANCH}
-    echo Check PR at: https://github.com/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/pulls
+    echo Image Tag: "${BUILD_NUMBER}"
+    echo PR: https://github.com/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/pulls
     echo ========================================
 """
                     }
@@ -176,8 +197,8 @@ pipeline {
             steps {
                 echo 'Cleaning up local Docker images...'
                 bat """
-                    docker rmi ${DOCKER_IMAGE}:${BUILD_NUMBER} 2>nul || echo Image not found
-                    docker rmi ${DOCKER_IMAGE}:latest 2>nul || echo Image not found
+                    docker rmi ${DOCKER_IMAGE}:${BUILD_NUMBER} 2>nul || echo Image already removed
+                    docker rmi ${DOCKER_IMAGE}:latest 2>nul || echo Image already removed
                 """
             }
         }
@@ -185,12 +206,21 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline succeeded! Image pushed: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
+            echo '========================================='
+            echo '✅ PIPELINE COMPLETED SUCCESSFULLY!'
+            echo '========================================='
+            echo "Docker Image: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
             echo "Docker Hub: https://hub.docker.com/r/yahyazakaria123/market-impact-analysis-system-news-ingestion-service"
-            echo "GitOps branch: ${GITOPS_BRANCH}"
+            echo "GitOps Branch: ${GITOPS_BRANCH}"
+            echo "Image Tag Format: \"${BUILD_NUMBER}\""
+            echo "PR: https://github.com/Saoudyahya/Flux-gitops-Market-Impact-Analysis-system/pulls"
+            echo '========================================='
         }
         failure {
-            echo 'Pipeline failed!'
+            echo '========================================='
+            echo '❌ PIPELINE FAILED!'
+            echo '========================================='
+            echo 'Check the logs above for error details'
         }
         always {
             cleanWs()
