@@ -1,53 +1,53 @@
 # services/news-ingestion/config/config.yaml
 server:
-  port: ${SERVER_PORT:4001}
-  grpc_port: ${GRPC_PORT:4002}
-  environment: ${ENVIRONMENT:development}
+  port: 4001
+  grpc_port: 4002
+  environment: development
 
 database:
   postgres:
-    host: ${POSTGRES_HOST:localhost}
-    port: ${POSTGRES_PORT:5432}
-    database: ${POSTGRES_DB:news_ingestion}
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:postgres}
-    ssl_mode: ${DATABASE_SSL_MODE:disable}
-    max_open_conns: ${DATABASE_MAX_OPEN_CONNS:25}
-    max_idle_conns: ${DATABASE_MAX_IDLE_CONNS:5}
-    conn_max_lifetime: ${DATABASE_CONN_MAX_LIFETIME:5m}
-    conn_max_idle_time: ${DATABASE_CONN_MAX_IDLE_TIME:1m}
+    host: localhost
+    port: 5432
+    database: news_ingestion
+    username: postgres
+    password: yahyasd56
+    ssl_mode: disable
+    max_open_conns: 25
+    max_idle_conns: 5
+    conn_max_lifetime: 5m
+    conn_max_idle_time: 1m
 
 redis:
-  host: ${REDIS_HOST:localhost}
-  port: ${REDIS_PORT:6379}
-  database: ${REDIS_DATABASE:0}
-  password: ${REDIS_PASSWORD:}
+  host: localhost
+  port: 6379
+  database: 0
+  password: ""
 
 logging:
-  level: ${LOG_LEVEL:info}
-  format: ${LOG_FORMAT:text}
+  level: info
+  format: text
 
 processing:
-  enable_auto_ingestion: ${PROCESSING_ENABLE_AUTO_INGESTION:true}
-  sentiment_trigger_threshold: ${PROCESSING_SENTIMENT_TRIGGER_THRESHOLD:10}
-  rss_schedule: ${PROCESSING_RSS_SCHEDULE:0 */2 * * * *}
-  newsapi_schedule: ${PROCESSING_NEWSAPI_SCHEDULE:0 */7 * * * *}
-  cleanup_schedule: ${PROCESSING_CLEANUP_SCHEDULE:0 0 0 * * *}
-  batch_size: ${PROCESSING_BATCH_SIZE:100}
-  worker_count: ${PROCESSING_WORKER_COUNT:5}
-  retry_attempts: ${PROCESSING_RETRY_ATTEMPTS:3}
-  timeout_seconds: ${PROCESSING_TIMEOUT_SECONDS:30}
+  enable_auto_ingestion: true
+  sentiment_trigger_threshold: 10
+  rss_schedule: "0 */2 * * * *"
+  newsapi_schedule: "0 */7 * * * *"
+  cleanup_schedule: "0 0 0 * * *"
+  batch_size: 100
+  worker_count: 5
+  retry_attempts: 3
+  timeout_seconds: 30
 
 news_sources:
   newsapi:
-    api_key: ${NEWSAPI_API_KEY:}
-    base_url: ${NEWSAPI_BASE_URL:https://newsapi.org/v2}
-    enabled: ${NEWSAPI_ENABLED:true}
+    api_key: ""
+    base_url: "https://newsapi.org/v2"
+    enabled: true
 
   twitter:
-    bearer_token: ${TWITTER_BEARER_TOKEN:}
-    base_url: ${TWITTER_BASE_URL:https://api.twitter.com/2}
-    enabled: ${TWITTER_ENABLED:false}
+    bearer_token: ""
+    base_url: "https://api.twitter.com/2"
+    enabled: false
 
   rss_feeds:
     - name: "Reuters World News"
@@ -88,6 +88,6 @@ news_sources:
 
 external_services:
   nlp_service:
-    grpc_endpoint: ${NLP_SERVICE_ENDPOINT:localhost:50052}
-    timeout: ${NLP_SERVICE_TIMEOUT:30s}
-    max_retry: ${NLP_SERVICE_MAX_RETRY:3}
+    grpc_endpoint: "localhost:50052"
+    timeout: "30s"
+    max_retry: 3
