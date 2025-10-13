@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -73,7 +75,7 @@ func main() {
 	logrus.Info("========================================")
 	logrus.Info("   News Ingestion Service Starting")
 	logrus.Info("========================================")
-	logrus.Infof("Environment: %s", viper.GetString("SERVER_ENVIRONMENT"))
+	logrus.Infof("Environment: %s", viper.GetString("server.environment"))
 	if viper.ConfigFileUsed() != "" {
 		logrus.Infof("Config loaded from: %s", viper.ConfigFileUsed())
 	}
@@ -86,14 +88,14 @@ func main() {
 	defer container.cleanup()
 
 	// Get ports from config
-	httpPort := viper.GetInt("SERVER_HTTP_PORT")
-	grpcPort := viper.GetInt("SERVER_GRPC_PORT")
+	httpPort := viper.GetInt("server.port")
+	grpcPort := viper.GetInt("server.grpc_port")
 
 	httpServer := setupHTTPServer(container.httpHandler, httpPort, container.db, container.ingestionService)
 	grpcServer := setupGRPCServer(container.grpcHandler, grpcPort)
 
 	// Start background jobs if enabled
-	if viper.GetBool("ENABLE_AUTO_INGESTION") {
+	if viper.GetBool("processing.enable_auto_ingestion") {
 		logrus.Info("Starting background ingestion jobs...")
 		container.startBackgroundJobs()
 	} else {
@@ -130,7 +132,7 @@ func main() {
 	logrus.Infof("   gRPC Server:  localhost:%d", grpcPort)
 	logrus.Infof("   Health Check: http://localhost:%d/health", httpPort)
 	if container.sentimentTriggerService != nil {
-		logrus.Infof("   Sentiment Trigger: ENABLED (threshold: %d)", viper.GetInt("SENTIMENT_TRIGGER_THRESHOLD"))
+		logrus.Infof("   Sentiment Trigger: ENABLED (threshold: %d)", viper.GetInt("processing.sentiment_trigger_threshold"))
 	} else {
 		logrus.Info("   Sentiment Trigger: DISABLED")
 	}
@@ -155,21 +157,22 @@ func initConfig() error {
 
 	// Enable environment variable reading
 	viper.AutomaticEnv()
-	// DO NOT set a prefix - we want to match the exact ENV var names from Kubernetes
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
-	// Set defaults before reading config
-	setConfigDefaults()
 
 	// Try to read config file
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			logrus.Warn("⚠️  Config file not found, using environment variables and defaults")
+			logrus.Warn("⚠️  Config file not found, using environment variables only")
 		} else {
-			logrus.Warnf("⚠️  Error reading config file: %v, using environment variables and defaults", err)
+			logrus.Warnf("⚠️  Error reading config file: %v, using environment variables", err)
 		}
 	} else {
 		logrus.Infof("✓ Using config file: %s", viper.ConfigFileUsed())
+
+		// Expand environment variables in config
+		if err := expandEnvironmentVariables(); err != nil {
+			return fmt.Errorf("failed to expand environment variables: %w", err)
+		}
 	}
 
 	// Validate critical configuration
@@ -183,76 +186,128 @@ func initConfig() error {
 	return nil
 }
 
-func setConfigDefaults() {
-	// Server defaults - matching Kubernetes environment variables
-	viper.SetDefault("SERVER_HTTP_PORT", 4001)
-	viper.SetDefault("SERVER_GRPC_PORT", 4002)
-	viper.SetDefault("SERVER_ENVIRONMENT", "development")
+// expandEnvironmentVariables expands ${VAR:default} syntax in all config values
+func expandEnvironmentVariables() error {
+	// Regular expression to match ${VAR:default} or ${VAR}
+	envVarPattern := regexp.MustCompile(`\$\{([^}:]+)(?::([^}]*))?\}`)
 
-	// Database defaults - matching Kubernetes environment variables
-	viper.SetDefault("POSTGRES_HOST", "localhost")
-	viper.SetDefault("POSTGRES_PORT", 5432)
-	viper.SetDefault("POSTGRES_DB", "news_ingestion")
-	viper.SetDefault("POSTGRES_USER", "postgres")
-	viper.SetDefault("POSTGRES_PASSWORD", "postgres")
-	viper.SetDefault("DATABASE_SSL_MODE", "disable")
-	viper.SetDefault("DATABASE_MAX_OPEN_CONNS", 25)
-	viper.SetDefault("DATABASE_MAX_IDLE_CONNS", 5)
-	viper.SetDefault("DATABASE_CONN_MAX_LIFETIME", "5m")
-	viper.SetDefault("DATABASE_CONN_MAX_IDLE_TIME", "1m")
+	// Get all settings
+	settings := viper.AllSettings()
 
-	// Redis defaults - matching Kubernetes environment variables
-	viper.SetDefault("REDIS_HOST", "localhost")
-	viper.SetDefault("REDIS_PORT", "6379")
-	viper.SetDefault("REDIS_PASSWORD", "")
-	viper.SetDefault("REDIS_DATABASE", "0")
+	// Process each setting recursively
+	expanded := expandMap(settings, envVarPattern)
 
-	// Logging defaults
-	viper.SetDefault("LOG_LEVEL", "info")
-	viper.SetDefault("LOG_FORMAT", "text")
+	// Merge expanded values back into viper
+	for key, value := range flattenMap("", expanded) {
+		viper.Set(key, value)
+	}
 
-	// Processing defaults
-	viper.SetDefault("ENABLE_AUTO_INGESTION", true)
-	viper.SetDefault("SENTIMENT_TRIGGER_THRESHOLD", 10)
-	viper.SetDefault("RSS_SCHEDULE", "0 */2 * * * *")
-	viper.SetDefault("NEWSAPI_SCHEDULE", "0 */7 * * * *")
-	viper.SetDefault("CLEANUP_SCHEDULE", "0 0 0 * * *")
-	viper.SetDefault("BATCH_SIZE", 100)
-	viper.SetDefault("WORKER_COUNT", 5)
-	viper.SetDefault("RETRY_ATTEMPTS", 3)
-	viper.SetDefault("TIMEOUT_SECONDS", 30)
+	return nil
+}
 
-	// News sources defaults
-	viper.SetDefault("NEWSAPI_KEY", "")
-	viper.SetDefault("NEWSAPI_BASE_URL", "https://newsapi.org/v2")
-	viper.SetDefault("NEWSAPI_ENABLED", true)
-	viper.SetDefault("TWITTER_BEARER_TOKEN", "")
-	viper.SetDefault("TWITTER_BASE_URL", "https://api.twitter.com/2")
-	viper.SetDefault("TWITTER_ENABLED", false)
+// expandMap recursively expands environment variables in a map
+func expandMap(m map[string]interface{}, pattern *regexp.Regexp) map[string]interface{} {
+	result := make(map[string]interface{})
 
-	// External services defaults
-	viper.SetDefault("NLP_PROCESSING_HOST", "localhost")
-	viper.SetDefault("NLP_PROCESSING_PORT", "50052")
-	viper.SetDefault("NLP_TIMEOUT", "30s")
-	viper.SetDefault("NLP_MAX_RETRY", 3)
+	for key, value := range m {
+		switch v := value.(type) {
+		case string:
+			result[key] = expandString(v, pattern)
+		case map[string]interface{}:
+			result[key] = expandMap(v, pattern)
+		case []interface{}:
+			result[key] = expandSlice(v, pattern)
+		default:
+			result[key] = value
+		}
+	}
+
+	return result
+}
+
+// expandSlice recursively expands environment variables in a slice
+func expandSlice(s []interface{}, pattern *regexp.Regexp) []interface{} {
+	result := make([]interface{}, len(s))
+
+	for i, value := range s {
+		switch v := value.(type) {
+		case string:
+			result[i] = expandString(v, pattern)
+		case map[string]interface{}:
+			result[i] = expandMap(v, pattern)
+		case []interface{}:
+			result[i] = expandSlice(v, pattern)
+		default:
+			result[i] = value
+		}
+	}
+
+	return result
+}
+
+// expandString replaces ${VAR:default} with environment variable value or default
+func expandString(s string, pattern *regexp.Regexp) string {
+	return pattern.ReplaceAllStringFunc(s, func(match string) string {
+		// Extract variable name and default value
+		submatches := pattern.FindStringSubmatch(match)
+		if len(submatches) < 2 {
+			return match
+		}
+
+		varName := submatches[1]
+		defaultValue := ""
+		if len(submatches) > 2 {
+			defaultValue = submatches[2]
+		}
+
+		// Get environment variable value
+		if envValue := os.Getenv(varName); envValue != "" {
+			return envValue
+		}
+
+		return defaultValue
+	})
+}
+
+// flattenMap converts nested map to flat map with dot notation keys
+func flattenMap(prefix string, m map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	for key, value := range m {
+		fullKey := key
+		if prefix != "" {
+			fullKey = prefix + "." + key
+		}
+
+		switch v := value.(type) {
+		case map[string]interface{}:
+			for k, val := range flattenMap(fullKey, v) {
+				result[k] = val
+			}
+		default:
+			result[fullKey] = value
+		}
+	}
+
+	return result
 }
 
 func validateConfig() error {
 	// Validate critical settings
-	if viper.GetString("POSTGRES_HOST") == "" {
-		return fmt.Errorf("database host is required (POSTGRES_HOST)")
+	if viper.GetString("database.postgres.host") == "" {
+		return fmt.Errorf("database host is required")
 	}
 
-	if viper.GetString("POSTGRES_DB") == "" {
-		return fmt.Errorf("database name is required (POSTGRES_DB)")
+	if viper.GetString("database.postgres.database") == "" {
+		return fmt.Errorf("database name is required")
 	}
 
-	if viper.GetInt("SERVER_HTTP_PORT") <= 0 || viper.GetInt("SERVER_HTTP_PORT") > 65535 {
-		return fmt.Errorf("invalid HTTP port: %d", viper.GetInt("SERVER_HTTP_PORT"))
+	if viper.GetInt("server.port") <= 0 || viper.GetInt("server.port") > 65535 {
+		return fmt.Errorf("invalid HTTP port: %d", viper.GetInt("server.port"))
 	}
 
-	if viper.GetInt("SERVER_GRPC_PORT") <= 0 || viper.GetInt("SERVER_GRPC_PORT") > 65535 {
-		return fmt.Errorf("invalid gRPC port: %d", viper.GetInt("SERVER_GRPC_PORT"))
+	if viper.GetInt("server.grpc_port") <= 0 || viper.GetInt("server.grpc_port") > 65535 {
+		return fmt.Errorf("invalid gRPC port: %d", viper.GetInt("server.grpc_port"))
 	}
 
 	return nil
@@ -260,33 +315,32 @@ func validateConfig() error {
 
 func logConfigSummary() {
 	logrus.Info("Configuration Summary:")
-	logrus.Infof("  HTTP Port: %d", viper.GetInt("SERVER_HTTP_PORT"))
-	logrus.Infof("  gRPC Port: %d", viper.GetInt("SERVER_GRPC_PORT"))
-	logrus.Infof("  Environment: %s", viper.GetString("SERVER_ENVIRONMENT"))
-	logrus.Infof("  Database Host: %s", viper.GetString("POSTGRES_HOST"))
-	logrus.Infof("  Database Name: %s", viper.GetString("POSTGRES_DB"))
-	logrus.Infof("  Database Port: %d", viper.GetInt("POSTGRES_PORT"))
-	logrus.Infof("  Redis Host: %s", viper.GetString("REDIS_HOST"))
-	logrus.Infof("  Redis Port: %s", viper.GetString("REDIS_PORT"))
-	logrus.Infof("  Log Level: %s", viper.GetString("LOG_LEVEL"))
-	logrus.Infof("  Auto Ingestion: %v", viper.GetBool("ENABLE_AUTO_INGESTION"))
-	logrus.Infof("  Sentiment Threshold: %d", viper.GetInt("SENTIMENT_TRIGGER_THRESHOLD"))
+	logrus.Infof("  HTTP Port: %d", viper.GetInt("server.port"))
+	logrus.Infof("  gRPC Port: %d", viper.GetInt("server.grpc_port"))
+	logrus.Infof("  Environment: %s", viper.GetString("server.environment"))
+	logrus.Infof("  Database Host: %s", viper.GetString("database.postgres.host"))
+	logrus.Infof("  Database Name: %s", viper.GetString("database.postgres.database"))
+	logrus.Infof("  Database Port: %d", viper.GetInt("database.postgres.port"))
+	logrus.Infof("  Redis Host: %s", viper.GetString("redis.host"))
+	logrus.Infof("  Redis Port: %v", viper.Get("redis.port"))
+	logrus.Infof("  Log Level: %s", viper.GetString("logging.level"))
+	logrus.Infof("  Auto Ingestion: %v", viper.GetBool("processing.enable_auto_ingestion"))
+	logrus.Infof("  Sentiment Threshold: %d", viper.GetInt("processing.sentiment_trigger_threshold"))
 
 	// Check if NewsAPI key is configured
-	if viper.GetString("NEWSAPI_KEY") != "" {
+	if viper.GetString("news_sources.newsapi.api_key") != "" {
 		logrus.Info("  NewsAPI: Configured ✓")
 	} else {
 		logrus.Warn("  NewsAPI: Not configured (API key missing)")
 	}
 
 	// Check if NLP service is configured
-	nlpHost := viper.GetString("NLP_PROCESSING_HOST")
-	nlpPort := viper.GetString("NLP_PROCESSING_PORT")
-	logrus.Infof("  NLP Service: %s:%s", nlpHost, nlpPort)
+	nlpEndpoint := viper.GetString("external_services.nlp_service.grpc_endpoint")
+	logrus.Infof("  NLP Service: %s", nlpEndpoint)
 }
 
 func initLogger() {
-	level := viper.GetString("LOG_LEVEL")
+	level := viper.GetString("logging.level")
 	switch strings.ToLower(level) {
 	case "debug":
 		logrus.SetLevel(logrus.DebugLevel)
@@ -300,7 +354,7 @@ func initLogger() {
 		logrus.SetLevel(logrus.InfoLevel)
 	}
 
-	format := viper.GetString("LOG_FORMAT")
+	format := viper.GetString("logging.format")
 	if strings.ToLower(format) == "json" {
 		logrus.SetFormatter(&logrus.JSONFormatter{
 			TimestampFormat: time.RFC3339,
@@ -319,16 +373,16 @@ func initLogger() {
 
 func initDatabase() (*database.Database, error) {
 	dbConfig := database.Config{
-		Host:            viper.GetString("POSTGRES_HOST"),
-		Port:            viper.GetInt("POSTGRES_PORT"),
-		Database:        viper.GetString("POSTGRES_DB"),
-		Username:        viper.GetString("POSTGRES_USER"),
-		Password:        viper.GetString("POSTGRES_PASSWORD"),
-		SSLMode:         viper.GetString("DATABASE_SSL_MODE"),
-		MaxOpenConns:    viper.GetInt("DATABASE_MAX_OPEN_CONNS"),
-		MaxIdleConns:    viper.GetInt("DATABASE_MAX_IDLE_CONNS"),
-		ConnMaxLifetime: viper.GetString("DATABASE_CONN_MAX_LIFETIME"),
-		ConnMaxIdleTime: viper.GetString("DATABASE_CONN_MAX_IDLE_TIME"),
+		Host:            viper.GetString("database.postgres.host"),
+		Port:            viper.GetInt("database.postgres.port"),
+		Database:        viper.GetString("database.postgres.database"),
+		Username:        viper.GetString("database.postgres.username"),
+		Password:        viper.GetString("database.postgres.password"),
+		SSLMode:         viper.GetString("database.postgres.ssl_mode"),
+		MaxOpenConns:    viper.GetInt("database.postgres.max_open_conns"),
+		MaxIdleConns:    viper.GetInt("database.postgres.max_idle_conns"),
+		ConnMaxLifetime: viper.GetString("database.postgres.conn_max_lifetime"),
+		ConnMaxIdleTime: viper.GetString("database.postgres.conn_max_idle_time"),
 	}
 
 	logrus.Infof("Connecting to database at %s:%d/%s",
@@ -389,20 +443,17 @@ func initializeServices() (*ServiceContainer, error) {
 	logrus.Info("✓ Repositories initialized")
 
 	newsAPIClient := client.NewNewsAPIClient(
-		viper.GetString("NEWSAPI_KEY"),
-		viper.GetString("NEWSAPI_BASE_URL"),
+		viper.GetString("news_sources.newsapi.api_key"),
+		viper.GetString("news_sources.newsapi.base_url"),
 	)
 	rssClient := client.NewRSSClient()
 	twitterClient := client.NewTwitterClient(
-		viper.GetString("TWITTER_BEARER_TOKEN"),
-		viper.GetString("TWITTER_BASE_URL"),
+		viper.GetString("news_sources.twitter.bearer_token"),
+		viper.GetString("news_sources.twitter.base_url"),
 	)
 	logrus.Info("✓ External API clients initialized")
 
-	nlpHost := viper.GetString("NLP_PROCESSING_HOST")
-	nlpPort := viper.GetString("NLP_PROCESSING_PORT")
-	nlpEndpoint := fmt.Sprintf("%s:%s", nlpHost, nlpPort)
-
+	nlpEndpoint := viper.GetString("external_services.nlp_service.grpc_endpoint")
 	nlpClient, err := client.NewNLPProcessingClient(nlpEndpoint)
 	if err != nil {
 		logrus.WithError(err).Warn("⚠️ Failed to connect to NLP service, sentiment trigger will be disabled")
@@ -431,7 +482,7 @@ func initializeServices() (*ServiceContainer, error) {
 
 	var sentimentTriggerService *service.SentimentTriggerService
 	if nlpClient != nil {
-		threshold := viper.GetInt("SENTIMENT_TRIGGER_THRESHOLD")
+		threshold := viper.GetInt("processing.sentiment_trigger_threshold")
 		sentimentTriggerService = service.NewSentimentTriggerService(
 			articleRepo,
 			nlpClient,
@@ -471,7 +522,7 @@ func (c *ServiceContainer) startBackgroundJobs() {
 	ctx := context.Background()
 
 	// RSS Feed Ingestion
-	rssSchedule := viper.GetString("RSS_SCHEDULE")
+	rssSchedule := viper.GetString("processing.rss_schedule")
 	_, err := c.cronScheduler.AddFunc(rssSchedule, func() {
 		logrus.Info("🔄 Starting scheduled RSS ingestion...")
 		startTime := time.Now()
@@ -493,7 +544,7 @@ func (c *ServiceContainer) startBackgroundJobs() {
 	}
 
 	// NewsAPI Ingestion
-	newsAPISchedule := viper.GetString("NEWSAPI_SCHEDULE")
+	newsAPISchedule := viper.GetString("processing.newsapi_schedule")
 	_, err = c.cronScheduler.AddFunc(newsAPISchedule, func() {
 		logrus.Info("🔄 Starting scheduled NewsAPI ingestion...")
 		startTime := time.Now()
@@ -515,7 +566,7 @@ func (c *ServiceContainer) startBackgroundJobs() {
 	}
 
 	// Rate limit cleanup
-	cleanupSchedule := viper.GetString("CLEANUP_SCHEDULE")
+	cleanupSchedule := viper.GetString("processing.cleanup_schedule")
 	_, err = c.cronScheduler.AddFunc(cleanupSchedule, func() {
 		logrus.Info("🧹 Starting rate limit cleanup...")
 		cutoff := time.Now().AddDate(0, 0, -7)
@@ -572,7 +623,7 @@ func (c *ServiceContainer) cleanup() {
 }
 
 func setupHTTPServer(httpHandler *handler.HTTPHandler, port int, db *database.Database, ingestionService service.IngestionService) *http.Server {
-	if viper.GetString("SERVER_ENVIRONMENT") == "production" {
+	if viper.GetString("server.environment") == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
@@ -611,13 +662,6 @@ func setupHTTPServer(httpHandler *handler.HTTPHandler, port int, db *database.Da
 
 	router.GET("/metrics", func(c *gin.Context) {
 		c.JSON(http.StatusOK, getMetrics())
-	})
-
-	router.GET("/db/status", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":    getDatabaseStatus(db),
-			"timestamp": time.Now().UTC(),
-		})
 	})
 
 	// API routes
@@ -707,7 +751,7 @@ func setupGRPCServer(grpcHandler *handler.GRPCHandler, port int) *grpc.Server {
 	grpcServer := grpc.NewServer(opts...)
 	newsv1.RegisterNewsServiceServer(grpcServer, grpcHandler)
 
-	if viper.GetString("SERVER_ENVIRONMENT") != "production" {
+	if viper.GetString("server.environment") != "production" {
 		reflection.Register(grpcServer)
 	}
 
@@ -734,7 +778,6 @@ func startGRPCServer(server *grpc.Server, port int) {
 
 	logrus.Infof("🔌 Starting gRPC server on port %d", port)
 	logrus.Infof("  → Address: localhost:%d", port)
-	logrus.Infof("  → Reflection: enabled")
 
 	if err := server.Serve(lis); err != nil {
 		logrus.Fatalf("gRPC server failed: %v", err)
