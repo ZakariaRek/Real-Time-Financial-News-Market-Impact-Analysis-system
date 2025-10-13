@@ -55,7 +55,8 @@ spring:
   # JPA Configuration - CHANGED: validate to create-drop for development
   jpa:
     hibernate:
-      ddl-auto: create-drop  # Changed from 'validate' to auto-create tables
+      ddl-auto: validate
+        # Changed from 'validate' to auto-create tables
     show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
