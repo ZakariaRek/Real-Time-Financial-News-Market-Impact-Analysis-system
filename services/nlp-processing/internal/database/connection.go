@@ -116,43 +116,25 @@ func NewConnection(cfg Config) (*Database, error) {
 func (d *Database) AutoMigrate() error {
 	logrus.Info("Starting database migrations...")
 
-	// First migrate tables without foreign keys
-	err := d.DB.AutoMigrate(&model.NewsSource{})
-	if err != nil {
-		return fmt.Errorf("failed to migrate NewsSource: %w", err)
+	tables := []interface{}{
+		&model.NewsSource{},
+		&model.Article{},
+		&model.ArticleProcessingLog{},
+		&model.SentimentAnalysis{},
+		&model.EntityRecognition{},
+		&model.TopicClassification{},
 	}
-	logrus.Info("NewsSource table migrated successfully")
 
-	err = d.DB.AutoMigrate(&model.Article{})
-	if err != nil {
-		return fmt.Errorf("failed to migrate Article: %w", err)
-	}
-	logrus.Info("Article table migrated successfully")
+	for _, table := range tables {
+		tableName := fmt.Sprintf("%T", table)
+		logrus.Infof("Migrating table: %s", tableName)
 
-	err = d.DB.AutoMigrate(&model.ArticleProcessingLog{})
-	if err != nil {
-		return fmt.Errorf("failed to migrate ArticleProcessingLog: %w", err)
-	}
-	logrus.Info("ArticleProcessingLog table migrated successfully")
+		if err := d.DB.AutoMigrate(table); err != nil {
+			return fmt.Errorf("failed to migrate %s: %w", tableName, err)
+		}
 
-	// ✅ ADD THESE NLP TABLES:
-	err = d.DB.AutoMigrate(&model.SentimentAnalysis{})
-	if err != nil {
-		return fmt.Errorf("failed to migrate SentimentAnalysis: %w", err)
+		logrus.Infof("Successfully migrated: %s", tableName)
 	}
-	logrus.Info("SentimentAnalysis table migrated successfully")
-
-	err = d.DB.AutoMigrate(&model.EntityRecognition{})
-	if err != nil {
-		return fmt.Errorf("failed to migrate EntityRecognition: %w", err)
-	}
-	logrus.Info("EntityRecognition table migrated successfully")
-
-	err = d.DB.AutoMigrate(&model.TopicClassification{})
-	if err != nil {
-		return fmt.Errorf("failed to migrate TopicClassification: %w", err)
-	}
-	logrus.Info("TopicClassification table migrated successfully")
 
 	logrus.Info("NLP Processing database migrations completed successfully")
 	return nil
