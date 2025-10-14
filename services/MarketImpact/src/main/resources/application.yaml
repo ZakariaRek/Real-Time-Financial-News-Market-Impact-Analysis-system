@@ -1,6 +1,4 @@
 spring:
-
-
   application:
     grpc:
       server:
@@ -95,14 +93,19 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,metrics
+      base-path: /actuator
   endpoint:
     health:
-      show-details: when_authorized
-  metrics:
-    export:
-      prometheus:
+      show-details: when-authorized
+      probes:
         enabled: true
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+
 
 # Application Configuration
 app:
