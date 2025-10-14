@@ -3,11 +3,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -26,8 +29,21 @@ import (
 	nlpv1 "github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/services/nlp-processing/proto/gen/nlp/v1"
 )
 
-func main() {
+// Health status tracking
+var (
+	isReady      int32 // 0 = not ready, 1 = ready
+	dbConnected  int32
+	grpcStarted  int32
+	modelsLoaded int32
+)
 
+type HealthResponse struct {
+	Status  string            `json:"status"`
+	Service string            `json:"service"`
+	Checks  map[string]string `json:"checks,omitempty"`
+}
+
+func main() {
 	// Initialize configuration
 	if err := initConfig(); err != nil {
 		logrus.Fatalf("Failed to initialize config: %v", err)
@@ -36,17 +52,29 @@ func main() {
 	initLogger()
 	logrus.Info("Starting S&P 500 NLP Processing Service (Sentiment Analysis)...")
 
+	// Start HTTP health server IMMEDIATELY (before migrations)
+	httpPort := viper.GetInt("server.http_port")
+	if httpPort == 0 {
+		httpPort = 8080 // default
+	}
+
+	httpServer := startHealthServer(httpPort)
+	logrus.Infof("HTTP health server started on port %d", httpPort)
+
 	// Initialize database
 	db, err := initDatabase()
 	if err != nil {
 		logrus.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
+	atomic.StoreInt32(&dbConnected, 1)
 
 	// Run migrations
+	logrus.Info("Starting database migrations...")
 	if err := db.AutoMigrate(); err != nil {
 		logrus.Fatalf("Failed to run migrations: %v", err)
 	}
+	logrus.Info("Migrations completed successfully")
 
 	// Create indexes for better query performance
 	if err := db.CreateIndexes(); err != nil {
@@ -80,9 +108,12 @@ func main() {
 
 	// Initialize models
 	ctx := context.Background()
+	logrus.Info("Loading NLP models...")
 	if err := nlpService.InitializeModels(ctx); err != nil {
 		logrus.Fatalf("Failed to initialize NLP models: %v", err)
 	}
+	logrus.Info("NLP models loaded successfully")
+	atomic.StoreInt32(&modelsLoaded, 1)
 
 	grpcServer := grpc.NewServer(
 		grpc.MaxRecvMsgSize(viper.GetInt("grpc.max_receive_message_size")),
@@ -93,7 +124,7 @@ func main() {
 	nlpHandler := handler.NewNLPGRPCHandler(nlpService, analysisRepo)
 	nlpv1.RegisterNLPProcessingServiceServer(grpcServer, nlpHandler)
 
-	// ADD THIS: Register standard gRPC Health Check service
+	// Register standard gRPC Health Check service
 	healthServer := health.NewServer()
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
 	healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
@@ -112,6 +143,7 @@ func main() {
 
 	go func() {
 		logrus.Infof("gRPC server listening on port %d", grpcPort)
+		atomic.StoreInt32(&grpcStarted, 1)
 		if err := grpcServer.Serve(lis); err != nil {
 			logrus.Fatalf("Failed to serve gRPC: %v", err)
 		}
@@ -133,6 +165,8 @@ func main() {
 		}()
 	}
 
+	// Mark service as ready
+	atomic.StoreInt32(&isReady, 1)
 	logrus.Info("S&P 500 NLP Processing Service started successfully!")
 	logrus.Info("Service is ready to analyze sentiment for S&P 500 news articles")
 
@@ -143,7 +177,17 @@ func main() {
 
 	logrus.Info("Shutting down NLP Processing Service...")
 
-	// Graceful shutdown
+	// Mark as not ready during shutdown
+	atomic.StoreInt32(&isReady, 0)
+
+	// Graceful shutdown of HTTP server
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := httpServer.Shutdown(ctx); err != nil {
+		logrus.Warnf("HTTP server shutdown error: %v", err)
+	}
+
+	// Graceful shutdown of gRPC server
 	stopped := make(chan struct{})
 	go func() {
 		grpcServer.GracefulStop()
@@ -165,6 +209,109 @@ func main() {
 	logrus.Info("NLP Processing Service shutdown complete")
 }
 
+// startHealthServer starts an HTTP server for health checks
+func startHealthServer(port int) *http.Server {
+	mux := http.NewServeMux()
+
+	// Basic health endpoint - returns 200 if server is running
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		response := HealthResponse{
+			Status:  "healthy",
+			Service: "nlp-processing",
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+	})
+
+	// Readiness endpoint - checks if service is fully initialized
+	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+		checks := make(map[string]string)
+		allReady := true
+
+		// Check database
+		if atomic.LoadInt32(&dbConnected) == 1 {
+			checks["database"] = "connected"
+		} else {
+			checks["database"] = "disconnected"
+			allReady = false
+		}
+
+		// Check models
+		if atomic.LoadInt32(&modelsLoaded) == 1 {
+			checks["models"] = "loaded"
+		} else {
+			checks["models"] = "loading"
+			allReady = false
+		}
+
+		// Check gRPC server
+		if atomic.LoadInt32(&grpcStarted) == 1 {
+			checks["grpc"] = "started"
+		} else {
+			checks["grpc"] = "starting"
+			allReady = false
+		}
+
+		// Overall readiness
+		if atomic.LoadInt32(&isReady) == 1 {
+			checks["overall"] = "ready"
+		} else {
+			checks["overall"] = "not_ready"
+			allReady = false
+		}
+
+		response := HealthResponse{
+			Service: "nlp-processing",
+			Checks:  checks,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if allReady {
+			response.Status = "ready"
+			w.WriteHeader(http.StatusOK)
+		} else {
+			response.Status = "not_ready"
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+
+		json.NewEncoder(w).Encode(response)
+	})
+
+	// Liveness endpoint - simple check that process is alive
+	mux.HandleFunc("/live", func(w http.ResponseWriter, r *http.Request) {
+		response := HealthResponse{
+			Status:  "alive",
+			Service: "nlp-processing",
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+	})
+
+	server := &http.Server{
+		Addr:         fmt.Sprintf(":%d", port),
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logrus.Fatalf("HTTP server failed: %v", err)
+		}
+	}()
+
+	// Give server a moment to start
+	time.Sleep(100 * time.Millisecond)
+
+	return server
+}
+
 func initConfig() error {
 	// Set up viper to read from config file
 	viper.SetConfigName("config")
@@ -178,6 +325,7 @@ func initConfig() error {
 
 	// Set defaults
 	viper.SetDefault("server.port", 4002)
+	viper.SetDefault("server.http_port", 8080)
 	viper.SetDefault("server.environment", "development")
 	viper.SetDefault("grpc.port", 50052)
 	viper.SetDefault("grpc.max_receive_message_size", 4194304) // 4MB
@@ -223,6 +371,7 @@ func initConfig() error {
 func bindEnvVars() {
 	// Server
 	viper.BindEnv("server.port", "SERVER_PORT")
+	viper.BindEnv("server.http_port", "SERVER_HTTP_PORT")
 	viper.BindEnv("server.environment", "ENVIRONMENT")
 
 	// Database
