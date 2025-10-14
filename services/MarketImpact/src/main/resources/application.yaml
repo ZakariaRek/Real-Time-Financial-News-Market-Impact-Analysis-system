@@ -94,18 +94,37 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
       base-path: /actuator
   endpoint:
     health:
       show-details: when-authorized
       probes:
         enabled: true
+    prometheus:
+      enabled: true
+    info:
+      enabled: true
+    metrics:
+      enabled: true
   health:
     livenessState:
       enabled: true
     readinessState:
       enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: production
+      service: market-impact
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+        step: 30s
 
 
 # Application Configuration

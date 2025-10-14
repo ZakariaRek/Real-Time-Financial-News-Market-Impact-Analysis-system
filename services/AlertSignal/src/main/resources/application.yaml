@@ -2,11 +2,11 @@ spring:
   application:
     name: AlertSignal
 
-
+#
 #  datasource:
 #    url: jdbc:postgresql://localhost:5432/alertsignal_db?currentSchema=public
 #    username: postgres
-#    password: yahyasd56
+#    password: zakaria
 #    driver-class-name: org.postgresql.Driver
 #    hikari:
 #      maximum-pool-size: 20
@@ -15,6 +15,8 @@ spring:
 #      connection-timeout: 60000
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_DATABASE}?currentSchema=${DB_SCHEMA:public}
+    #    url: jdbc:postgresql://localhost:5432/alertsignal_db?currentSchema=public
+
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -129,12 +131,27 @@ management:
       show-details: always  # Changed from when-authorized
       probes:
         enabled: true  # Enable liveness and readiness probes
+    prometheus:
+      enabled: true
+    info:
+      enabled: true
+    metrics:
+      enabled: true
   health:
     livenessState:
       enabled: true
     readinessState:
       enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: production
+      service: alert-signal
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
   prometheus:
     metrics:
       export:
         enabled: true
+        step: 30s
