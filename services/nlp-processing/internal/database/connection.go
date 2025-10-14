@@ -114,25 +114,15 @@ func NewConnection(cfg Config) (*Database, error) {
 }
 
 func (d *Database) AutoMigrate() error {
-	// Run database migrations
-	// In production with AWS RDS, consider using golang-migrate for better control
-	err := d.DB.AutoMigrate(
-		&model.SentimentAnalysis{},
-		&model.EntityRecognition{},
-		&model.TopicClassification{},
-		&model.SentimentHourlyMV{},
-	)
-	// Migrate in the correct order to handle foreign key dependencies
 	logrus.Info("Starting database migrations...")
 
 	// First migrate tables without foreign keys
-	err = d.DB.AutoMigrate(&model.NewsSource{})
+	err := d.DB.AutoMigrate(&model.NewsSource{})
 	if err != nil {
 		return fmt.Errorf("failed to migrate NewsSource: %w", err)
 	}
 	logrus.Info("NewsSource table migrated successfully")
 
-	// Then migrate tables with foreign keys
 	err = d.DB.AutoMigrate(&model.Article{})
 	if err != nil {
 		return fmt.Errorf("failed to migrate Article: %w", err)
@@ -145,10 +135,24 @@ func (d *Database) AutoMigrate() error {
 	}
 	logrus.Info("ArticleProcessingLog table migrated successfully")
 
-	//err = d.DB.AutoMigrate(&model.RateLimitTracking{})
+	// ✅ ADD THESE NLP TABLES:
+	err = d.DB.AutoMigrate(&model.SentimentAnalysis{})
 	if err != nil {
-		return fmt.Errorf("failed to run auto migrations: %w", err)
+		return fmt.Errorf("failed to migrate SentimentAnalysis: %w", err)
 	}
+	logrus.Info("SentimentAnalysis table migrated successfully")
+
+	err = d.DB.AutoMigrate(&model.EntityRecognition{})
+	if err != nil {
+		return fmt.Errorf("failed to migrate EntityRecognition: %w", err)
+	}
+	logrus.Info("EntityRecognition table migrated successfully")
+
+	err = d.DB.AutoMigrate(&model.TopicClassification{})
+	if err != nil {
+		return fmt.Errorf("failed to migrate TopicClassification: %w", err)
+	}
+	logrus.Info("TopicClassification table migrated successfully")
 
 	logrus.Info("NLP Processing database migrations completed successfully")
 	return nil
