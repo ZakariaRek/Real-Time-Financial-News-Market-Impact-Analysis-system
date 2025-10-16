@@ -463,16 +463,20 @@ func initDatabase() (*database.Database, error) {
 func initRedis() *redis.Client {
 	password := viper.GetString("redis.password")
 
-	// Only set password if it's not empty - Redis client will skip AUTH if password is empty
-	if password == "" {
-		logrus.Info("Redis password is empty, connecting without authentication")
+	opts := &redis.Options{
+		Addr: fmt.Sprintf("%s:%d", viper.GetString("redis.host"), viper.GetInt("redis.port")),
+		DB:   viper.GetInt("redis.database"),
 	}
 
-	return redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", viper.GetString("redis.host"), viper.GetInt("redis.port")),
-		Password: password, // Empty string means no AUTH command will be sent
-		DB:       viper.GetInt("redis.database"),
-	})
+	// Only set password if it's not empty
+	if password != "" {
+		opts.Password = password
+		logrus.Info("Connecting to Redis with authentication")
+	} else {
+		logrus.Info("Connecting to Redis without authentication (no password)")
+	}
+
+	return redis.NewClient(opts)
 }
 
 func initStreamProcessor(nlpService service.NLPProcessingService) (*service.StreamProcessor, error) {
