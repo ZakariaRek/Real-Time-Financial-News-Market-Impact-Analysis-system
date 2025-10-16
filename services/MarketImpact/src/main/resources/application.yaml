@@ -24,7 +24,21 @@ spring:
 #        max-inbound-metadata-size: 8KB
     name: MarketImpact
 
-  #  Database Configuration
+  # Database Configuration
+  #  datasource:
+  #    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/market_impact?currentSchema=public}
+  #    username: ${DB_USERNAME:postgres}
+  #    # password: ${DB_PASSWORD:zakaria}
+  #    password: ${DB_PASSWORD:yahyasd56}
+  #
+  #    driver-class-name: org.postgresql.Driver
+  #    hikari:
+  #      connection-timeout: 20000
+  #      maximum-pool-size: 20
+  #      minimum-idle: 5
+  #      idle-timeout: 300000
+  #      max-lifetime: 1200000
+  #      leak-detection-threshold: 60000
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/market_impact?currentSchema=public}
     username: ${DB_USERNAME:postgres}
@@ -53,7 +67,8 @@ spring:
   # JPA Configuration - CHANGED: validate to create-drop for development
   jpa:
     hibernate:
-      ddl-auto: create-drop  # Changed from 'validate' to auto-create tables
+      ddl-auto: validate
+        # Changed from 'validate' to auto-create tables
     show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
@@ -93,18 +108,37 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
       base-path: /actuator
   endpoint:
     health:
       show-details: when-authorized
       probes:
         enabled: true
+    prometheus:
+      enabled: true
+    info:
+      enabled: true
+    metrics:
+      enabled: true
   health:
     livenessState:
       enabled: true
     readinessState:
       enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: production
+      service: market-impact
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+        step: 30s
 
 
 # Application Configuration
