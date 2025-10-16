@@ -24,31 +24,31 @@ spring:
 #        max-inbound-metadata-size: 8KB
     name: MarketImpact
 
-  # Database Configuration
-#  datasource:
-#    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/market_impact?currentSchema=public}
-#    username: ${DB_USERNAME:postgres}
-#    # password: ${DB_PASSWORD:zakaria}
-#    password: ${DB_PASSWORD:yahyasd56}
-#
-#    driver-class-name: org.postgresql.Driver
-#    hikari:
-#      connection-timeout: 20000
-#      maximum-pool-size: 20
-#      minimum-idle: 5
-#      idle-timeout: 300000
-#      max-lifetime: 1200000
-#      leak-detection-threshold: 60000
+  #  Database Configuration
   datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_DATABASE}?currentSchema=${DB_SCHEMA:public}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/market_impact?currentSchema=public}
+    username: ${DB_USERNAME:postgres}
+    # password: ${DB_PASSWORD:zakaria}
+    password: ${DB_PASSWORD:yahyasd56}
+
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
-      minimum-idle: ${DB_POOL_MIN_SIZE:5}
-      idle-timeout: ${DB_IDLE_TIMEOUT:300000}
-      connection-timeout: ${DB_CONNECTION_TIMEOUT:60000}
+      connection-timeout: 20000
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      leak-detection-threshold: 60000
+#  datasource:
+#    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_DATABASE}?currentSchema=${DB_SCHEMA:public}
+#    username: ${DB_USERNAME}
+#    password: ${DB_PASSWORD}
+#    driver-class-name: org.postgresql.Driver
+#    hikari:
+#      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+#      minimum-idle: ${DB_POOL_MIN_SIZE:5}
+#      idle-timeout: ${DB_IDLE_TIMEOUT:300000}
+#      connection-timeout: ${DB_CONNECTION_TIMEOUT:60000}
 
   # JPA Configuration - CHANGED: validate to create-drop for development
   jpa:
@@ -134,20 +134,19 @@ server:
 external:
   services:
     nlp-processing:
-      host: localhost
-      port: 50052
+      host: ${EXTERNAL_SERVICES_NLP_PROCESSING_HOST:localhost}
+      port: ${EXTERNAL_SERVICES_NLP_PROCESSING_PORT:50052}
       timeout: 30s
 
     news-ingestion:
-      host: localhost
-      port: 4002
+      host: ${EXTERNAL_SERVICES_NEWS_INGESTION_HOST:localhost}
+      port: ${EXTERNAL_SERVICES_NEWS_INGESTION_PORT:4002}
       timeout: 30s
 
     alert-signal:
-      host: localhost
-      port: 9095
+      host: ${EXTERNAL_SERVICES_ALERT_SIGNAL_HOST:localhost}
+      port: ${EXTERNAL_SERVICES_ALERT_SIGNAL_PORT:9095}
       timeout: 30s
-
 
 
   task:
