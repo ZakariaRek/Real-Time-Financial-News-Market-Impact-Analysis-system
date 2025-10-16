@@ -2,21 +2,8 @@ spring:
   application:
     name: AlertSignal
 
-#
-#  datasource:
-#    url: jdbc:postgresql://localhost:5432/alertsignal_db?currentSchema=public
-#    username: postgres
-#    password: zakaria
-#    driver-class-name: org.postgresql.Driver
-#    hikari:
-#      maximum-pool-size: 20
-#      minimum-idle: 5
-#      idle-timeout: 300000
-#      connection-timeout: 60000
   datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_DATABASE}?currentSchema=${DB_SCHEMA:public}
-    #    url: jdbc:postgresql://localhost:5432/alertsignal_db?currentSchema=public
-
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_DATABASE}?currentSchema=${DB_SCHEMA:public}&sslmode=require
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -25,20 +12,6 @@ spring:
       minimum-idle: ${DB_POOL_MIN_SIZE:5}
       idle-timeout: ${DB_IDLE_TIMEOUT:300000}
       connection-timeout: ${DB_CONNECTION_TIMEOUT:60000}
-#  datasource:
-#    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/alertsignal_db?currentSchema=public}
-#    username: ${DB_USERNAME:postgres}
-#    password: ${DB_PASSWORD:zakaria}
-##      password: ${DB_PASSWORD:yahyasd56}
-#
-#    driver-class-name: org.postgresql.Driver
-#    hikari:
-#      connection-timeout: 20000
-#      maximum-pool-size: 20
-#      minimum-idle: 5
-#      idle-timeout: 300000
-#      max-lifetime: 1200000
-#      leak-detection-threshold: 60000
 
   jpa:
     hibernate:
@@ -51,36 +24,28 @@ spring:
         use_sql_comments: true
         type:
           preferred_uuid_jdbc_type: CHAR
+
   data:
     redis:
-      host: ${REDIS_HOST:host.docker.internal}  # Changed from localhost
-      port: 6379
-      password:
-      timeout: 2000ms
+      host: ${REDIS_HOST:host.docker.internal}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:3}
+      timeout: ${REDIS_TIMEOUT:2000}ms
       lettuce:
         pool:
-          max-active: 20
-          max-idle: 8
-          min-idle: 2
-#    redis:
-#      host: ${REDIS_HOST:localhost}
-#      port: 6379
-#      password:
-#      timeout: 2000ms
-#      lettuce:
-#        pool:
-#          max-active: 20
-#          max-idle: 8
-#          min-idle: 2
-  # gRPC Server Configuration
+          max-active: ${REDIS_POOL_MAX_ACTIVE:20}
+          max-idle: ${REDIS_POOL_MAX_IDLE:8}
+          min-idle: ${REDIS_POOL_MIN_IDLE:2}
 
+  # gRPC Server Configuration
   grpc:
     server:
-      port: 9095  # Change this to an available port
+      port: ${GRPC_SERVER_PORT:9095}
       max-inbound-message-size: 4MB
     client:
       market-impact-service:
-        address: 'static://localhost:9091'
+        address: 'static://${EXTERNAL_SERVICES_MARKET_IMPACT_HOST:localhost}:${EXTERNAL_SERVICES_MARKET_IMPACT_PORT:9090}'
         negotiationType: plaintext
         deadline: 30s
         max-inbound-message-size: 4MB
@@ -89,20 +54,20 @@ spring:
 external:
   services:
     market-impact:
-      host: localhost
-      port: 9090
+      host: ${EXTERNAL_SERVICES_MARKET_IMPACT_HOST:localhost}
+      port: ${EXTERNAL_SERVICES_MARKET_IMPACT_PORT:9090}
+      timeout: 30s
+    nlp-processing:
+      host: ${EXTERNAL_SERVICES_NLP_PROCESSING_HOST:localhost}
+      port: ${EXTERNAL_SERVICES_NLP_PROCESSING_PORT:50052}
       timeout: 30s
 
 # Application-specific Configuration
 app:
   signals:
-    # High confidence threshold for signal generation
     high-confidence-threshold: 0.8
-    # Minimum impact score for signal generation
     min-impact-score: 50.0
-    # Signal cache TTL in hours
     cache-ttl-hours: 24
-    # WebSocket update interval in milliseconds
     websocket-update-interval: 5000
 
 logging:
@@ -113,13 +78,13 @@ logging:
     io.grpc: INFO
 
 server:
-  port: 8081
+  port: ${SERVER_PORT:8081}
   servlet:
     context-path: /api
 
 management:
   server:
-    port: 8081  # Use same port as application
+    port: ${SERVER_PORT:8081}
   endpoints:
     web:
       base-path: /actuator
@@ -128,9 +93,9 @@ management:
   endpoint:
     health:
       enabled: true
-      show-details: always  # Changed from when-authorized
+      show-details: always
       probes:
-        enabled: true  # Enable liveness and readiness probes
+        enabled: true
     prometheus:
       enabled: true
     info:
