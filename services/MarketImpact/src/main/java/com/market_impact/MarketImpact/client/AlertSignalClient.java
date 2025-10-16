@@ -29,15 +29,17 @@ public class AlertSignalClient {
     public void init() {
         log.info("🔌 Initializing AlertSignal gRPC client: {}:{}", host, port);
 
+        // ✅ FIX: Add message size configuration
         this.channel = ManagedChannelBuilder
                 .forAddress(host, port)
                 .usePlaintext()
+                .maxInboundMessageSize(4 * 1024 * 1024)      // ✅ 4MB
+                .maxInboundMetadataSize(8 * 1024)            // ✅ 8KB
                 .build();
 
         this.stub = SignalProcessingServiceGrpc.newBlockingStub(channel);
         log.info("✅ AlertSignal gRPC client initialized successfully");
     }
-
     @PreDestroy
     public void shutdown() {
         if (channel != null) {
