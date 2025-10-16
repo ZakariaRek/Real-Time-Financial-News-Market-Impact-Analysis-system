@@ -44,9 +44,6 @@ public class NLPServiceClient {
         log.info("📍 Target: {}:{}", nlpServiceHost, nlpServicePort);
 
         initializeChannel();
-
-        // Don't fail startup if NLP service is not ready
-        // Connection will be retried by scheduler
         log.info("✅ NLP Service client initialized (connection will be verified asynchronously)");
     }
 
@@ -61,9 +58,12 @@ public class NLPServiceClient {
                 }
             }
 
+            // ✅ FIX: Add message size configuration
             this.channel = ManagedChannelBuilder
                     .forAddress(nlpServiceHost, nlpServicePort)
                     .usePlaintext()
+                    .maxInboundMessageSize(4 * 1024 * 1024)      // ✅ 4MB - matches NLP service
+                    .maxInboundMetadataSize(8 * 1024)            // ✅ 8KB
                     .keepAliveTime(30, TimeUnit.SECONDS)
                     .keepAliveTimeout(10, TimeUnit.SECONDS)
                     .keepAliveWithoutCalls(true)
@@ -79,7 +79,6 @@ public class NLPServiceClient {
             connected = false;
         }
     }
-
     /**
      * Periodically test connection and reconnect if needed
      */
