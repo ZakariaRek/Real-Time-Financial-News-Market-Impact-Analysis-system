@@ -12,7 +12,7 @@ database:
     port: ${POSTGRES_PORT:5432}
     database: ${POSTGRES_DB:nlp_processing}
     username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:postgres}
+    password: ${POSTGRES_PASSWORD:yahyasd56}
     ssl_mode: ${DATABASE_SSL_MODE:disable}
     max_open_conns: ${DATABASE_MAX_OPEN_CONNS:30}
     max_idle_conns: ${DATABASE_MAX_IDLE_CONNS:10}
