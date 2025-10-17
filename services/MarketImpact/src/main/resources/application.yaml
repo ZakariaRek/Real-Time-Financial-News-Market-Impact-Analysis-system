@@ -1,196 +1,196 @@
-spring:
-  application:
-    name: MarketImpact
+  spring:
+    application:
+      name: MarketImpact
+      grpc:
+        server:
+          port: 9090
+          max-inbound-message-size: 4MB
+          max-inbound-metadata-size: 8KB
+          keep-alive-time: 30s
+          keep-alive-timeout: 5s
+          keep-alive-without-calls: true
+          max-connection-idle: 60s
+          max-connection-age: 30s
+          max-connection-age-grace: 5s
+          permit-keep-alive-time: 10s
+          permit-keep-alive-without-calls: false
+          reflection:
+            enabled: true
+
+    # ✅ FIXED: Use Alert Signal Pattern - Construct URL from environment variables
+    datasource:
+      url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_DATABASE}?currentSchema=${DB_SCHEMA:public}&sslmode=require
+      username: ${DB_USERNAME}
+      password: ${DB_PASSWORD}
+      driver-class-name: org.postgresql.Driver
+      hikari:
+        maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+        minimum-idle: ${DB_POOL_MIN_SIZE:5}
+        idle-timeout: ${DB_IDLE_TIMEOUT:300000}
+        connection-timeout: ${DB_CONNECTION_TIMEOUT:60000}
+        max-lifetime: 1200000
+        leak-detection-threshold: 60000
+
+    # JPA Configuration
+    jpa:
+      hibernate:
+        ddl-auto: validate
+      show-sql: ${SHOW_SQL:false}
+      properties:
+        hibernate:
+          dialect: org.hibernate.dialect.PostgreSQLDialect
+          format_sql: true
+          default_schema: ${DB_SCHEMA:public}
+          jdbc:
+            time_zone: UTC
+      open-in-view: false
+
+    # Flyway Configuration
+    flyway:
+      enabled: false
+
+    # Redis Configuration - Use Alert Signal Pattern
+    data:
+      redis:
+        host: ${REDIS_HOST:host.docker.internal}
+        port: ${REDIS_PORT:6379}
+        password: ${REDIS_PASSWORD:}
+        database: ${REDIS_DATABASE:2}
+        timeout: ${REDIS_TIMEOUT:2000}ms
+        lettuce:
+          pool:
+            max-active: ${REDIS_POOL_MAX_ACTIVE:20}
+            max-idle: ${REDIS_POOL_MAX_IDLE:8}
+            min-idle: ${REDIS_POOL_MIN_IDLE:2}
+
+    # gRPC Configuration
     grpc:
       server:
-        port: 9090
-        max-inbound-message-size: 4MB
-        max-inbound-metadata-size: 8KB
-        keep-alive-time: 30s
-        keep-alive-timeout: 5s
-        keep-alive-without-calls: true
-        max-connection-idle: 60s
-        max-connection-age: 30s
-        max-connection-age-grace: 5s
-        permit-keep-alive-time: 10s
-        permit-keep-alive-without-calls: false
-        reflection:
-          enabled: true
+        port: ${GRPC_SERVER_PORT:9090}
 
-  # ✅ FIXED: Use Alert Signal Pattern - Construct URL from environment variables
-  datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_DATABASE}?currentSchema=${DB_SCHEMA:public}&sslmode=require
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
-    driver-class-name: org.postgresql.Driver
-    hikari:
-      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
-      minimum-idle: ${DB_POOL_MIN_SIZE:5}
-      idle-timeout: ${DB_IDLE_TIMEOUT:300000}
-      connection-timeout: ${DB_CONNECTION_TIMEOUT:60000}
-      max-lifetime: 1200000
-      leak-detection-threshold: 60000
+  # External Services Configuration
+  external:
+    services:
+      nlp-processing:
+        host: ${EXTERNAL_SERVICES_NLP_PROCESSING_HOST:localhost}
+        port: ${EXTERNAL_SERVICES_NLP_PROCESSING_PORT:50052}
+        timeout: 30s
+      news-ingestion:
+        host: ${EXTERNAL_SERVICES_NEWS_INGESTION_HOST:localhost}
+        port: ${EXTERNAL_SERVICES_NEWS_INGESTION_PORT:4002}
+        timeout: 30s
+      alert-signal:
+        host: ${EXTERNAL_SERVICES_ALERT_SIGNAL_HOST:localhost}
+        port: ${EXTERNAL_SERVICES_ALERT_SIGNAL_PORT:9095}
+        timeout: 30s
 
-  # JPA Configuration
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    show-sql: ${SHOW_SQL:false}
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
-        default_schema: ${DB_SCHEMA:public}
-        jdbc:
-          time_zone: UTC
-    open-in-view: false
+  # Application-specific Configuration
+  app:
+    market-impact:
+      prediction:
+        confidence-threshold: 0.7
+        batch-size: 1000
+      timescale:
+        retention-days: 365
+        compression-interval: 7d
+      cache:
+        prediction-ttl: 3600
+        market-data-ttl: 300
 
-  # Flyway Configuration
-  flyway:
-    enabled: false
-
-  # Redis Configuration - Use Alert Signal Pattern
-  data:
-    redis:
-      host: ${REDIS_HOST:host.docker.internal}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-      database: ${REDIS_DATABASE:2}
-      timeout: ${REDIS_TIMEOUT:2000}ms
-      lettuce:
-        pool:
-          max-active: ${REDIS_POOL_MAX_ACTIVE:20}
-          max-idle: ${REDIS_POOL_MAX_IDLE:8}
-          min-idle: ${REDIS_POOL_MIN_IDLE:2}
-
-  # gRPC Configuration
-  grpc:
-    server:
-      port: ${GRPC_SERVER_PORT:9090}
-
-# External Services Configuration
-external:
-  services:
-    nlp-processing:
-      host: ${EXTERNAL_SERVICES_NLP_PROCESSING_HOST:localhost}
-      port: ${EXTERNAL_SERVICES_NLP_PROCESSING_PORT:50052}
-      timeout: 30s
-    news-ingestion:
-      host: ${EXTERNAL_SERVICES_NEWS_INGESTION_HOST:localhost}
-      port: ${EXTERNAL_SERVICES_NEWS_INGESTION_PORT:4002}
-      timeout: 30s
-    alert-signal:
-      host: ${EXTERNAL_SERVICES_ALERT_SIGNAL_HOST:localhost}
-      port: ${EXTERNAL_SERVICES_ALERT_SIGNAL_PORT:9095}
-      timeout: 30s
-
-# Application-specific Configuration
-app:
+  # Market Impact S&P 500 Configuration
   market-impact:
+    sp500:
+      symbols:
+        - AAPL
+        - MSFT
+        - GOOGL
+        - AMZN
+        - NVDA
+        - META
+        - TSLA
+        - BRK.B
+        - UNH
+        - XOM
+        - JPM
+        - V
+        - JNJ
+        - WMT
+        - PG
+      batch-size: 10
+      max-concurrent: 5
     prediction:
       confidence-threshold: 0.7
-      batch-size: 1000
-    timescale:
-      retention-days: 365
-      compression-interval: 7d
-    cache:
-      prediction-ttl: 3600
-      market-data-ttl: 300
+      batch-size: 100
+      sentiment-weight: 0.6
+      trend-weight: 0.4
 
-# Market Impact S&P 500 Configuration
-market-impact:
-  sp500:
-    symbols:
-      - AAPL
-      - MSFT
-      - GOOGL
-      - AMZN
-      - NVDA
-      - META
-      - TSLA
-      - BRK.B
-      - UNH
-      - XOM
-      - JPM
-      - V
-      - JNJ
-      - WMT
-      - PG
-    batch-size: 10
-    max-concurrent: 5
-  prediction:
-    confidence-threshold: 0.7
-    batch-size: 100
-    sentiment-weight: 0.6
-    trend-weight: 0.4
-
-# Server Configuration
-server:
-  port: ${SERVER_PORT:8082}
-  servlet:
-    context-path: ${SERVER_CONTEXT_PATH:/market-impact}
-  compression:
-    enabled: true
-  http2:
-    enabled: true
-
-# Management/Actuator Configuration
-management:
+  # Server Configuration
   server:
     port: ${SERVER_PORT:8082}
-  endpoints:
-    web:
-      base-path: /actuator
-      exposure:
-        include: health,info,metrics,prometheus
-  endpoint:
+    servlet:
+      context-path: ${SERVER_CONTEXT_PATH:/market-impact}
+    compression:
+      enabled: true
+    http2:
+      enabled: true
+
+  # Management/Actuator Configuration
+  management:
+    server:
+      port: ${SERVER_PORT:8082}
+    endpoints:
+      web:
+        base-path: /actuator
+        exposure:
+          include: health,info,metrics,prometheus
+    endpoint:
+      health:
+        enabled: true
+        show-details: always
+        probes:
+          enabled: true
+      prometheus:
+        enabled: true
+      info:
+        enabled: true
+      metrics:
+        enabled: true
     health:
-      enabled: true
-      show-details: always
-      probes:
+      livenessState:
         enabled: true
+      readinessState:
+        enabled: true
+    metrics:
+      tags:
+        application: ${spring.application.name}
+        environment: ${ENVIRONMENT:production}
+        service: market-impact
+      distribution:
+        percentiles-histogram:
+          http.server.requests: true
     prometheus:
-      enabled: true
-    info:
-      enabled: true
-    metrics:
-      enabled: true
-  health:
-    livenessState:
-      enabled: true
-    readinessState:
-      enabled: true
-  metrics:
-    tags:
-      application: ${spring.application.name}
-      environment: ${ENVIRONMENT:production}
-      service: market-impact
-    distribution:
-      percentiles-histogram:
-        http.server.requests: true
-  prometheus:
-    metrics:
-      export:
-        enabled: true
-        step: 30s
+      metrics:
+        export:
+          enabled: true
+          step: 30s
 
-# Logging Configuration
-logging:
-  level:
-    root: INFO
-    com.market_impact.MarketImpact: DEBUG
-    io.grpc: INFO
-    org.hibernate.SQL: ${SQL_LOGGING:false}
-    org.hibernate.type.descriptor.sql.BasicBinder: ${SQL_TRACE:false}
+  # Logging Configuration
+  logging:
+    level:
+      root: INFO
+      com.market_impact.MarketImpact: DEBUG
+      io.grpc: INFO
+      org.hibernate.SQL: ${SQL_LOGGING:false}
+      org.hibernate.type.descriptor.sql.BasicBinder: ${SQL_TRACE:false}
 
-# Task Scheduling
-task:
-  scheduling:
-    enabled: false
-    pool:
-      size: 5
-  execution:
-    pool:
-      core-size: 10
-      max-size: 20
-      queue-capacity: 100
+  # Task Scheduling
+  task:
+    scheduling:
+      enabled: false
+      pool:
+        size: 5
+    execution:
+      pool:
+        core-size: 10
+        max-size: 20
+        queue-capacity: 100

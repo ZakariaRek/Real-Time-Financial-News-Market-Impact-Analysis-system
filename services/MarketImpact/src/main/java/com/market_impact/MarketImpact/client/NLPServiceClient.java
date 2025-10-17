@@ -1,4 +1,3 @@
-// services/MarketImpact/src/main/java/com/market_impact/MarketImpact/client/NLPServiceClient.java
 package com.market_impact.MarketImpact.client;
 
 import com.market_impact.grpc.nlp.*;
@@ -38,6 +37,9 @@ public class NLPServiceClient {
     private volatile int consecutiveFailures = 0;
     private static final int MAX_CONSECUTIVE_FAILURES = 3;
 
+    // ✅ FIX: Per-call timeout instead of global deadline
+    private static final long CALL_TIMEOUT_SECONDS = 30;
+
     @PostConstruct
     public void init() {
         log.info("🔌 Initializing NLP Service client");
@@ -58,20 +60,19 @@ public class NLPServiceClient {
                 }
             }
 
-            // ✅ FIX: Add message size configuration
             this.channel = ManagedChannelBuilder
                     .forAddress(nlpServiceHost, nlpServicePort)
                     .usePlaintext()
-                    .maxInboundMessageSize(4 * 1024 * 1024)      // ✅ 4MB - matches NLP service
-                    .maxInboundMetadataSize(8 * 1024)            // ✅ 8KB
+                    .maxInboundMessageSize(4 * 1024 * 1024)
+                    .maxInboundMetadataSize(8 * 1024)
                     .keepAliveTime(30, TimeUnit.SECONDS)
                     .keepAliveTimeout(10, TimeUnit.SECONDS)
                     .keepAliveWithoutCalls(true)
                     .idleTimeout(60, TimeUnit.SECONDS)
                     .build();
 
-            this.blockingStub = NLPProcessingServiceGrpc.newBlockingStub(channel)
-                    .withDeadlineAfter(30, TimeUnit.SECONDS);
+            // ✅ FIX: Create stub WITHOUT a global deadline
+            this.blockingStub = NLPProcessingServiceGrpc.newBlockingStub(channel);
 
             log.info("✅ NLP Service channel created: {}:{}", nlpServiceHost, nlpServicePort);
         } catch (Exception e) {
@@ -79,10 +80,8 @@ public class NLPServiceClient {
             connected = false;
         }
     }
-    /**
-     * Periodically test connection and reconnect if needed
-     */
-    @Scheduled(fixedDelay = 30000, initialDelay = 5000) // Every 30 seconds, start after 5 seconds
+
+    @Scheduled(fixedDelay = 30000, initialDelay = 5000)
     public void checkConnection() {
         try {
             if (channel == null || channel.isShutdown() || channel.isTerminated()) {
@@ -90,7 +89,7 @@ public class NLPServiceClient {
                 initializeChannel();
             }
 
-            // Test connection
+            // Test connection with per-call deadline
             var healthStub = io.grpc.health.v1.HealthGrpc.newBlockingStub(channel)
                     .withDeadlineAfter(5, TimeUnit.SECONDS);
             var request = io.grpc.health.v1.HealthCheckRequest.newBuilder().build();
@@ -105,7 +104,7 @@ public class NLPServiceClient {
         } catch (StatusRuntimeException e) {
             consecutiveFailures++;
 
-            if (connected || consecutiveFailures % 10 == 1) { // Log every 10th failure to avoid spam
+            if (connected || consecutiveFailures % 10 == 1) {
                 log.warn("⚠️ NLP Service health check failed (attempt {}/{}): {} - {}",
                         consecutiveFailures, MAX_CONSECUTIVE_FAILURES,
                         e.getStatus().getCode(), e.getMessage());
@@ -119,7 +118,6 @@ public class NLPServiceClient {
                 }
             }
 
-            // Try to reinitialize channel after multiple failures
             if (consecutiveFailures % 5 == 0) {
                 log.info("🔄 Attempting to reinitialize channel after {} failures", consecutiveFailures);
                 initializeChannel();
@@ -163,7 +161,10 @@ public class NLPServiceClient {
                     .setArticleId(articleId)
                     .build();
 
-            GetAnalysisResponse response = blockingStub.getAnalysisResult(request);
+            // ✅ FIX: Add per-call deadline
+            GetAnalysisResponse response = blockingStub
+                    .withDeadlineAfter(CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .getAnalysisResult(request);
 
             if (response.getFound() && response.hasResult() && response.getResult().hasSentiment()) {
                 SentimentAnalysis sentiment = response.getResult().getSentiment();
@@ -186,7 +187,6 @@ public class NLPServiceClient {
             log.error("❌ gRPC error getting sentiment for article {}: {} - {}",
                     articleId, e.getStatus().getCode(), e.getMessage());
 
-            // Mark as disconnected on certain errors
             if (e.getStatus().getCode() == io.grpc.Status.Code.UNAVAILABLE ||
                     e.getStatus().getCode() == io.grpc.Status.Code.DEADLINE_EXCEEDED) {
                 consecutiveFailures++;
@@ -220,7 +220,10 @@ public class NLPServiceClient {
                     .setLimit(limit)
                     .build();
 
-            SentimentTrendsResponse response = blockingStub.getSentimentTrends(request);
+            // ✅ FIX: Add per-call deadline
+            SentimentTrendsResponse response = blockingStub
+                    .withDeadlineAfter(CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .getSentimentTrends(request);
 
             List<SentimentTrendData> trends = response.getTrendsList().stream()
                     .map(trend -> SentimentTrendData.builder()
