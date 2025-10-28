@@ -1,1062 +1,1018 @@
-# 📊 Market Impact Analysis System - Terraform Infrastructure
+# 📰 News Ingestion Service
 
 <div align="center">
 
-![Terraform](https://img.shields.io/badge/Terraform-1.5+-623CE4?style=for-the-badge&logo=terraform&logoColor=white)
-![AWS](https://img.shields.io/badge/AWS-Cloud-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)
-![Kubernetes](https://img.shields.io/badge/Kubernetes-1.30-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=for-the-badge&logo=postgresql&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-7.1-DC382D?style=for-the-badge&logo=redis&logoColor=white)
+![Go Version](https://img.shields.io/badge/Go-1.23-00ADD8?style=for-the-badge&logo=go)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker)
+![gRPC](https://img.shields.io/badge/gRPC-Enabled-244c5a?style=for-the-badge&logo=grpc)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14-336791?style=for-the-badge&logo=postgresql)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-**Production-ready Terraform infrastructure for real-time financial news analysis and market impact assessment**
+**Real-Time Financial News Ingestion & Processing Pipeline**
 
-[Getting Started](#-quick-start) • [Architecture](#-architecture) • [Modules](#-modules) • [Deployment](#-deployment-guide) • [Contributing](#-contributing)
+[Features](#-features) • [Quick Start](#-quick-start) • [API Docs](#-api-documentation) • [Architecture](#-architecture) • [Configuration](#-configuration)
 
 </div>
 
 ---
 
-## 📑 Table of Contents
+## 📋 Table of Contents
 
 - [Overview](#-overview)
+- [Features](#-features)
 - [Architecture](#-architecture)
-- [Prerequisites](#-prerequisites)
-- [Quick Start](#-quick-start)
-- [Project Structure](#-project-structure)
-- [Modules](#-modules)
-- [Environments](#-environments)
-- [Deployment Guide](#-deployment-guide)
+- [Tech Stack](#-tech-stack)
+- [Getting Started](#-getting-started)
+- [API Documentation](#-api-documentation)
 - [Configuration](#-configuration)
-- [Security](#-security)
-- [Monitoring](#-monitoring)
-- [Cost Optimization](#-cost-optimization)
-- [Troubleshooting](#-troubleshooting)
-- [Best Practices](#-best-practices)
+- [Development](#-development)
+- [Deployment](#-deployment)
+- [Testing](#-testing)
 - [Contributing](#-contributing)
+- [License](#-license)
 
 ---
 
 ## 🎯 Overview
 
-This repository contains the complete Infrastructure as Code (IaC) for the Market Impact Analysis System, a sophisticated platform designed to analyze financial news in real-time and assess its impact on market movements.
+The **News Ingestion Service** is a core component of the Real-Time Financial News Market Impact Analysis System. It handles the automated collection, processing, and storage of financial news from multiple sources including RSS feeds, NewsAPI, and Twitter.
 
-### Key Features
+### Key Capabilities
 
-✅ **Multi-Environment Support** - Development, Staging, and Production configurations  
-✅ **High Availability** - Multi-AZ deployment with automatic failover  
-✅ **Auto-Scaling** - Kubernetes-based workload orchestration with EKS  
-✅ **Security First** - Encryption at rest and in transit, private subnets, IAM roles  
-✅ **Cost Optimized** - Intelligent resource sizing and lifecycle policies  
-✅ **Monitoring Ready** - CloudWatch integration with custom alarms  
-✅ **Disaster Recovery** - Automated backups and recovery procedures
+- 🔄 **Multi-Source Ingestion**: RSS, NewsAPI, Twitter integration
+- 🔍 **Intelligent Deduplication**: Content-based duplicate detection
+- 🎯 **Symbol Extraction**: Automatic stock ticker identification
+- 📊 **Relevance Scoring**: Article importance calculation
+- 🚀 **Real-time Processing**: Streaming gRPC APIs
+- 🧠 **NLP Integration**: Seamless connection to sentiment analysis
+- ⚡ **High Performance**: Batch processing and concurrent ingestion
+- 🔐 **Production Ready**: Health checks, metrics, graceful shutdown
+
+---
+
+## ✨ Features
+
+### Ingestion Capabilities
+
+- ✅ **RSS Feed Parsing**: Support for major financial news sources
+- ✅ **NewsAPI Integration**: Access to 80,000+ news sources
+- ✅ **Twitter Monitoring**: Real-time social media tracking
+- ✅ **Scheduled Ingestion**: Cron-based automatic updates
+- ✅ **Manual Triggers**: On-demand ingestion via HTTP/gRPC
+- ✅ **Rate Limiting**: Per-source request throttling
+
+### Data Processing
+
+- ✅ **Content Extraction**: Title, content, author, metadata
+- ✅ **Symbol Recognition**: $AAPL, GOOGL, TSLA detection
+- ✅ **Keyword Extraction**: Financial term identification
+- ✅ **Relevance Scoring**: Article importance metrics
+- ✅ **Deduplication**: Hash-based and similarity detection
+- ✅ **Content Validation**: Length and quality checks
+
+### Integration
+
+- ✅ **gRPC Streaming**: Real-time article streaming to NLP service
+- ✅ **HTTP REST API**: Traditional RESTful endpoints
+- ✅ **Batch Processing**: Efficient bulk operations
+- ✅ **Acknowledgment System**: Processing confirmation tracking
+- ✅ **Sentiment Triggers**: Automatic NLP processing triggers
+
+### Observability
+
+- ✅ **Health Checks**: Liveness and readiness probes
+- ✅ **Metrics Endpoint**: Service statistics
+- ✅ **Structured Logging**: JSON/text format support
+- ✅ **Processing Logs**: Detailed audit trail
+- ✅ **Error Tracking**: Comprehensive error reporting
 
 ---
 
 ## 🏗️ Architecture
 
-### High-Level Architecture
+### System Overview
 
 ```mermaid
 graph TB
-    subgraph Internet
-        Users[Users/Applications]
+    subgraph "External Sources"
+        RSS[RSS Feeds<br/>Reuters, Bloomberg, etc.]
+        NewsAPI[NewsAPI<br/>80,000+ Sources]
+        Twitter[Twitter API<br/>Financial Tweets]
     end
-    
-    subgraph AWS Cloud
-        subgraph VPC["VPC (10.2.0.0/16)"]
-            subgraph Public Subnets
-                IGW[Internet Gateway]
-                NAT[NAT Gateway]
-                ALB[Application Load Balancer]
-            end
-            
-            subgraph Private Subnets
-                subgraph EKS Cluster
-                    API[API Services]
-                    Worker[Worker Nodes]
-                    Processing[Data Processing]
-                end
-            end
-            
-            subgraph Database Subnets
-                RDS[(RDS PostgreSQL<br/>Existing Instance)]
-                Redis[(ElastiCache Redis)]
-            end
-            
-            subgraph Storage
-                S3[S3 Data Lake]
-            end
+
+    subgraph "News Ingestion Service"
+        HTTP[HTTP Server<br/>:4001]
+        GRPC[gRPC Server<br/>:4002]
+        
+        subgraph "Core Services"
+            IngestionSvc[Ingestion Service]
+            DeduplicationSvc[Deduplication Service]
+            ExtractionSvc[Extraction Service]
+            TriggerSvc[Sentiment Trigger Service]
         end
         
-        subgraph Security & Management
-            KMS[AWS KMS]
-            Secrets[Secrets Manager]
-            CW[CloudWatch]
-            SSM[Systems Manager]
+        subgraph "Clients"
+            RSSClient[RSS Client]
+            APIClient[NewsAPI Client]
+            TwitterClient[Twitter Client]
+            NLPClient[NLP Client]
         end
+        
+        subgraph "Storage"
+            PostgreSQL[(PostgreSQL<br/>Articles & Sources)]
+            Redis[(Redis<br/>Cache)]
+        end
+        
+        Scheduler[Cron Scheduler]
     end
-    
-    Users --> ALB
-    ALB --> API
-    API --> Worker
-    Worker --> Processing
-    Processing --> RDS
-    Processing --> Redis
-    Processing --> S3
-    
-    EKS Cluster --> KMS
-    RDS --> KMS
-    Redis --> KMS
-    S3 --> KMS
-    
-    EKS Cluster --> CW
-    RDS --> CW
-    Redis --> CW
-    
-    API --> Secrets
-    Worker --> Secrets
 
-    style VPC fill:#e1f5ff
-    style EKS Cluster fill:#fff4e6
-    style Security & Management fill:#f3e5f5
-    style Storage fill:#e8f5e9
+    subgraph "Downstream Services"
+        NLP[NLP Processing Service<br/>Sentiment Analysis]
+    end
+
+    RSS --> RSSClient
+    NewsAPI --> APIClient
+    Twitter --> TwitterClient
+    
+    RSSClient --> IngestionSvc
+    APIClient --> IngestionSvc
+    TwitterClient --> IngestionSvc
+    
+    IngestionSvc --> DeduplicationSvc
+    IngestionSvc --> ExtractionSvc
+    
+    DeduplicationSvc --> PostgreSQL
+    ExtractionSvc --> PostgreSQL
+    
+    Scheduler --> IngestionSvc
+    
+    TriggerSvc --> NLPClient
+    TriggerSvc --> PostgreSQL
+    
+    NLPClient --> NLP
+    GRPC --> NLP
+    
+    HTTP --> IngestionSvc
+    GRPC --> IngestionSvc
+    
+    IngestionSvc --> Redis
+
+    style IngestionSvc fill:#4CAF50
+    style PostgreSQL fill:#336791
+    style Redis fill:#DC382D
+    style NLP fill:#FF9800
 ```
 
-### Network Architecture
-
-```mermaid
-graph TB
-    subgraph Region["AWS Region: us-east-1"]
-        subgraph VPC["VPC: 10.2.0.0/16"]
-            IGW[Internet Gateway]
-            
-            subgraph AZ1["Availability Zone 1a"]
-                PubSub1[Public Subnet<br/>10.2.0.0/24]
-                PrivSub1[Private Subnet<br/>10.2.10.0/24]
-                DBSub1[Database Subnet<br/>10.2.20.0/24]
-                NAT1[NAT Gateway]
-            end
-            
-            subgraph AZ2["Availability Zone 1b"]
-                PubSub2[Public Subnet<br/>10.2.1.0/24]
-                PrivSub2[Private Subnet<br/>10.2.11.0/24]
-                DBSub2[Database Subnet<br/>10.2.21.0/24]
-            end
-            
-            subgraph AZ3["Availability Zone 1c"]
-                PubSub3[Public Subnet<br/>10.2.2.0/24]
-                PrivSub3[Private Subnet<br/>10.2.12.0/24]
-                DBSub3[Database Subnet<br/>10.2.22.0/24]
-            end
-        end
-    end
-    
-    IGW --> PubSub1
-    IGW --> PubSub2
-    IGW --> PubSub3
-    
-    PubSub1 --> NAT1
-    NAT1 --> PrivSub1
-    NAT1 --> PrivSub2
-    NAT1 --> PrivSub3
-    
-    style VPC fill:#e3f2fd
-    style AZ1 fill:#fff3e0
-    style AZ2 fill:#f3e5f5
-    style AZ3 fill:#e8f5e9
-```
-
-### EKS Cluster Architecture
-
-```mermaid
-graph TB
-    subgraph EKS["EKS Cluster: dev-market-impact-eks"]
-        subgraph Control Plane
-            API_Server[API Server]
-            Scheduler[Scheduler]
-            Controller[Controller Manager]
-        end
-        
-        subgraph Node Group
-            Node1[Worker Node 1<br/>t3.small]
-            Node2[Worker Node 2<br/>t3.small]
-            Node3[Worker Node N<br/>SPOT Instances]
-        end
-        
-        subgraph Addons
-            VPC_CNI[VPC CNI]
-            CoreDNS[CoreDNS]
-            KubeProxy[Kube Proxy]
-            EBS_CSI[EBS CSI Driver]
-        end
-        
-        subgraph Workloads
-            API_Pods[API Pods]
-            Worker_Pods[Worker Pods]
-            Processing_Pods[Processing Pods]
-        end
-    end
-    
-    API_Server --> Node1
-    API_Server --> Node2
-    API_Server --> Node3
-    
-    Node1 --> API_Pods
-    Node2 --> Worker_Pods
-    Node3 --> Processing_Pods
-    
-    VPC_CNI -.-> Node1
-    CoreDNS -.-> Node2
-    KubeProxy -.-> Node3
-
-    style Control Plane fill:#bbdefb
-    style Node Group fill:#c8e6c9
-    style Addons fill:#fff9c4
-    style Workloads fill:#f8bbd0
-```
-
-### Data Flow Architecture
+### Data Flow Pipeline
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant ALB
-    participant API
-    participant Worker
-    participant RDS
-    participant Redis
-    participant S3
+    participant Cron as Cron Scheduler
+    participant Ing as Ingestion Service
+    participant Ext as Extraction Service
+    participant Dedup as Deduplication
+    participant DB as PostgreSQL
+    participant Trigger as Sentiment Trigger
+    participant NLP as NLP Service
 
-    Client->>ALB: HTTPS Request
-    ALB->>API: Route to API Pod
-    API->>Redis: Check Cache
-    alt Cache Hit
-        Redis-->>API: Return Cached Data
-        API-->>Client: Response
-    else Cache Miss
-        API->>RDS: Query Database
-        RDS-->>API: Return Data
-        API->>Redis: Update Cache
-        API->>Worker: Trigger Processing
-        Worker->>S3: Store Raw Data
-        Worker->>RDS: Store Results
-        Worker->>Redis: Update Cache
-        API-->>Client: Response
+    Cron->>Ing: Scheduled Trigger (Every 2 min)
+    
+    loop For Each Source
+        Ing->>Ext: Fetch & Extract Articles
+        Ext->>Dedup: Check Duplicates
+        
+        alt Article is Unique
+            Dedup->>DB: Save Article (Status: Pending)
+            Dedup-->>Ing: Success
+        else Article is Duplicate
+            Dedup-->>Ing: Skip
+        end
+    end
+    
+    Trigger->>DB: Check Pending Count
+    
+    alt Threshold Exceeded (>10 articles)
+        Trigger->>DB: Fetch Pending Articles
+        
+        loop Batch Processing (100 articles/batch)
+            Trigger->>NLP: Send Batch via gRPC
+            NLP-->>Trigger: Processing Acknowledgment
+        end
+        
+        NLP->>DB: Update Status (Processing → Completed)
     end
 ```
 
-### Security Architecture
+### Database Schema
 
 ```mermaid
-graph TB
-    subgraph Internet
-        User[User]
-    end
-    
-    subgraph AWS["AWS Account"]
-        subgraph IAM["Identity & Access Management"]
-            ClusterRole[EKS Cluster Role]
-            NodeRole[Node Group Role]
-            IRSA[IAM Roles for Service Accounts]
-        end
-        
-        subgraph Encryption
-            KMS_EKS[KMS - EKS]
-            KMS_RDS[KMS - RDS]
-            KMS_Redis[KMS - Redis]
-            KMS_S3[KMS - S3]
-        end
-        
-        subgraph Network Security
-            SG_Cluster[EKS Cluster SG]
-            SG_Node[Node Group SG]
-            SG_RDS[RDS SG]
-            SG_Redis[Redis SG]
-            NACL[Network ACLs]
-        end
-        
-        subgraph Secrets
-            SM[Secrets Manager]
-            SSM[SSM Parameter Store]
-        end
-        
-        subgraph Monitoring
-            CW_Logs[CloudWatch Logs]
-            CW_Alarms[CloudWatch Alarms]
-            FlowLogs[VPC Flow Logs]
-        end
-    end
-    
-    User --> SG_Cluster
-    SG_Cluster --> SG_Node
-    SG_Node --> SG_RDS
-    SG_Node --> SG_Redis
-    
-    SG_Node --> KMS_EKS
-    SG_RDS --> KMS_RDS
-    SG_Redis --> KMS_Redis
-    
-    ClusterRole --> IRSA
-    NodeRole --> IRSA
-    
-    IRSA --> SM
-    IRSA --> SSM
+erDiagram
+    NEWS_SOURCES ||--o{ ARTICLES : sources
+    ARTICLES ||--o{ ARTICLE_PROCESSING_LOGS : logs
+    NEWS_SOURCES ||--o{ RATE_LIMIT_TRACKING : tracks
 
-    style IAM fill:#ffebee
-    style Encryption fill:#e8f5e9
-    style Network Security fill:#fff3e0
-    style Secrets fill:#f3e5f5
-    style Monitoring fill:#e3f2fd
+    NEWS_SOURCES {
+        uint id PK
+        string name UK
+        string source_type
+        string base_url
+        int rate_limit_per_minute
+        string status
+        float success_rate
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    ARTICLES {
+        uuid id PK
+        uint source_id FK
+        string title
+        text content
+        string url
+        text[] symbols
+        timestamp published_at
+        string processing_status
+        float relevance_score
+        string content_hash UK
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    ARTICLE_PROCESSING_LOGS {
+        uint id PK
+        uuid article_id FK
+        string processing_stage
+        string status
+        int processing_time_ms
+        text error_message
+        timestamp created_at
+    }
+
+    RATE_LIMIT_TRACKING {
+        uint id PK
+        uint source_id FK
+        timestamp time_window
+        int request_count
+        timestamp created_at
+        timestamp updated_at
+    }
 ```
 
 ---
 
-## 📋 Prerequisites
+## 🛠️ Tech Stack
 
-Before you begin, ensure you have the following tools installed:
+<div align="center">
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| ![Terraform](https://img.shields.io/badge/-Terraform-623CE4?style=flat&logo=terraform&logoColor=white) | ≥ 1.5.0 | Infrastructure provisioning |
-| ![AWS CLI](https://img.shields.io/badge/-AWS_CLI-FF9900?style=flat&logo=amazon-aws&logoColor=white) | ≥ 2.x | AWS service interaction |
-| ![kubectl](https://img.shields.io/badge/-kubectl-326CE5?style=flat&logo=kubernetes&logoColor=white) | ≥ 1.30 | Kubernetes management |
-| ![Git](https://img.shields.io/badge/-Git-F05032?style=flat&logo=git&logoColor=white) | Latest | Version control |
+### Core Technologies
 
-### AWS Requirements
+| Technology | Purpose | Version |
+|------------|---------|---------|
+| ![Go](https://img.shields.io/badge/Go-00ADD8?style=flat&logo=go&logoColor=white) | Backend Language | 1.23.0 |
+| ![gRPC](https://img.shields.io/badge/gRPC-244c5a?style=flat&logo=grpc&logoColor=white) | RPC Framework | Latest |
+| ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?style=flat&logo=postgresql&logoColor=white) | Database | 14 |
+| ![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat&logo=redis&logoColor=white) | Cache | 7 |
+| ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white) | Containerization | Latest |
 
-- **AWS Account** with appropriate permissions
-- **IAM User** or **Role** with the following policies:
-    - `AmazonEC2FullAccess`
-    - `AmazonEKSClusterPolicy`
-    - `AmazonEKSWorkerNodePolicy`
-    - `AmazonRDSFullAccess`
-    - `AmazonElastiCacheFullAccess`
-    - `AmazonS3FullAccess`
-    - `IAMFullAccess`
-    - `AWSKeyManagementServicePowerUser`
+### Frameworks & Libraries
 
----
+| Library | Purpose |
+|---------|---------|
+| **Gin** | HTTP Web Framework |
+| **GORM** | ORM for PostgreSQL |
+| **Viper** | Configuration Management |
+| **Logrus** | Structured Logging |
+| **Cron** | Job Scheduling |
+| **Protocol Buffers** | API Serialization |
 
-## 🚀 Quick Start
+### External Integrations
 
-### 1. Clone the Repository
+| Service | Purpose |
+|---------|---------|
+| **NewsAPI** | 80,000+ News Sources |
+| **RSS Feeds** | Direct Feed Parsing |
+| **Twitter API** | Social Media Monitoring |
 
-```bash
-git clone https://github.com/your-org/market-impact-terraform.git
-cd market-impact-terraform
-```
-
-### 2. Configure AWS Credentials
-
-```bash
-aws configure
-# Enter your AWS Access Key ID
-# Enter your AWS Secret Access Key
-# Enter your default region: us-east-1
-```
-
-### 3. Initialize Terraform Backend (First Time Only)
-
-```bash
-cd environments/development
-terraform init -backend-config=../../backend-configs/backenddev.tf
-```
-
-### 4. Review and Deploy
-
-```bash
-# Review the execution plan
-terraform plan -var-file=../dev.tfvars
-
-# Deploy infrastructure
-terraform apply -var-file=../dev.tfvars
-```
-
-### 5. Configure kubectl
-
-```bash
-aws eks update-kubeconfig --region us-east-1 --name dev-market-impact-eks
-kubectl get nodes
-```
+</div>
 
 ---
 
-## 📁 Project Structure
+## 🚀 Getting Started
 
-```
-terraform/
-├── 📄 README.md                          # This file
-├── 📄 .gitignore                         # Git ignore patterns
-│
-├── 📁 backend-configs/                   # Backend state configurations
-│   ├── backenddev.tf                     # Development backend config
-│   ├── backendstag.tf                    # Staging backend config
-│   └── backendprod.tf                    # Production backend config
-│
-├── 📁 environments/                      # Environment-specific configurations
-│   ├── 📄 dev.tfvars                     # Development variables
-│   ├── 📄 staging.tfvars                 # Staging variables
-│   ├── 📄 production.tfvars              # Production variables
-│   │
-│   └── 📁 development/                   # Development environment
-│       ├── main.tf                       # Main configuration
-│       ├── variables.tf                  # Variable definitions
-│       └── outputs.tf                    # Output definitions
-│
-└── 📁 modules/                           # Reusable Terraform modules
-    │
-    ├── 📁 Networking/                    # VPC and networking
-    │   ├── main.tf
-    │   ├── variables.tf
-    │   ├── outputs.tf
-    │   └── README.md
-    │
-    ├── 📁 eks/                           # EKS cluster
-    │   ├── main.tf
-    │   ├── security-groups.tf
-    │   ├── variables.tf
-    │   ├── outputs.tf
-    │   └── README.md
-    │
-    ├── 📁 rds/                           # RDS PostgreSQL
-    │   ├── main.tf
-    │   ├── variables.tf
-    │   ├── outputs.tf
-    │   └── README.md
-    │
-    ├── 📁 ElastiCache/                   # Redis cluster
-    │   ├── main.tf
-    │   ├── variables.tf
-    │   ├── outputs.tf
-    │   └── README.md
-    │
-    └── 📁 s3/                            # S3 buckets
-        ├── main.tf
-        ├── variables.tf
-        ├── outputs.tf
-        └── README.md
+### Prerequisites
+
+```bash
+# Required
+- Go 1.23+
+- PostgreSQL 14+
+- Redis 7+
+- Docker & Docker Compose (optional)
+
+# Recommended
+- Make
+- Protocol Buffer Compiler (protoc)
 ```
 
----
+### Installation
 
-## 🧩 Modules
+#### 1️⃣ Clone the Repository
 
-### 1. Networking Module
-
-**Purpose:** Creates VPC, subnets, NAT gateways, and networking infrastructure.
-
-**Resources:**
-- ✅ VPC with DNS support
-- ✅ Public subnets (3 AZs)
-- ✅ Private subnets (3 AZs)
-- ✅ Database subnets (3 AZs)
-- ✅ Internet Gateway
-- ✅ NAT Gateway (configurable single or multi-AZ)
-- ✅ Route tables
-- ✅ VPC Flow Logs (optional)
-- ✅ VPC Endpoints (optional)
-
-**Usage:**
-```hcl
-module "networking" {
-  source = "../../modules/Networking"
-
-  environment          = "dev"
-  vpc_cidr             = "10.2.0.0/16"
-  region               = "us-east-1"
-  cluster_name         = "dev-market-impact-eks"
-  enable_nat_gateway   = true
-  single_nat_gateway   = true
-  enable_flow_logs     = false
-  enable_vpc_endpoints = false
-}
+```bash
+git clone https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system.git
+cd Real-Time-Financial-News-Market-Impact-Analysis-system/services/news-ingestion
 ```
 
-### 2. EKS Module
+#### 2️⃣ Install Dependencies
 
-**Purpose:** Provisions EKS cluster with managed node groups.
-
-**Resources:**
-- ✅ EKS Control Plane
-- ✅ Managed Node Group with Auto Scaling
-- ✅ IAM Roles and Policies
-- ✅ Security Groups
-- ✅ OIDC Provider for IRSA
-- ✅ EKS Addons (VPC CNI, CoreDNS, Kube-proxy, EBS CSI)
-- ✅ KMS encryption
-- ✅ CloudWatch logging
-
-**Features:**
-- 🔹 SPOT instance support
-- 🔹 Custom launch templates
-- 🔹 IMDSv2 enforcement
-- 🔹 EBS volume encryption
-- 🔹 Node monitoring
-
-**Usage:**
-```hcl
-module "eks" {
-  source = "../../modules/eks"
-
-  cluster_name       = "dev-market-impact-eks"
-  cluster_version    = "1.30"
-  environment        = "dev"
-  vpc_id             = module.networking.vpc_id
-  private_subnet_ids = module.networking.private_subnet_ids
-  public_subnet_ids  = module.networking.public_subnet_ids
-  
-  node_instance_types = ["t3.small"]
-  node_desired_size   = 15
-  node_min_size       = 15
-  node_max_size       = 17
-  node_capacity_type  = "SPOT"
-}
+```bash
+go mod download
 ```
 
-### 3. RDS Module
+#### 3️⃣ Configure Environment
 
-**Purpose:** Creates PostgreSQL RDS instance with high availability.
+```bash
+# Copy example config
+cp .env.example .env
 
-**Resources:**
-- ✅ RDS PostgreSQL instance
-- ✅ DB subnet group
-- ✅ Parameter group
-- ✅ Security group
-- ✅ KMS encryption
-- ✅ Automated backups
-- ✅ Secrets Manager integration
-- ✅ CloudWatch alarms
-
-**Features:**
-- 🔹 Multi-AZ deployment
-- 🔹 Performance Insights
-- 🔹 Enhanced Monitoring
-- 🔹 Automated backups
-- 🔹 Point-in-time recovery
-
-**Note:** In the development environment, we use an existing RDS instance created outside Terraform.
-
-### 4. ElastiCache Module
-
-**Purpose:** Provisions Redis cluster for caching.
-
-**Resources:**
-- ✅ Redis Replication Group
-- ✅ Subnet group
-- ✅ Parameter group
-- ✅ Security group
-- ✅ KMS encryption
-- ✅ Secrets Manager integration
-- ✅ CloudWatch alarms
-
-**Features:**
-- 🔹 Automatic failover
-- 🔹 Multi-AZ support
-- 🔹 Redis 7.1 with latest features
-- 🔹 Automated snapshots
-- 🔹 Transit encryption support
-
-**Usage:**
-```hcl
-module "elasticache" {
-  source = "../../modules/ElastiCache"
-
-  environment             = "dev"
-  vpc_id                  = module.networking.vpc_id
-  private_subnet_ids      = module.networking.private_subnet_ids
-  allowed_security_groups = [module.eks.node_security_group_id]
-  
-  redis_version              = "7.1"
-  redis_node_type            = "cache.t3.micro"
-  redis_num_cache_nodes      = 1
-  multi_az_enabled           = false
-  transit_encryption_enabled = false
-}
+# Edit configuration
+nano .env
 ```
 
-### 5. S3 Module
+**Required Configuration:**
 
-**Purpose:** Creates S3 buckets for data storage.
+```bash
+# Database
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=news_ingestion
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_password
 
-**Resources:**
-- ✅ S3 bucket
-- ✅ Bucket policy
-- ✅ Versioning
-- ✅ Server-side encryption (KMS)
-- ✅ Lifecycle policies
-- ✅ Public access block
-- ✅ CloudWatch size monitoring
+# API Keys
+NEWSAPI_KEY=your_newsapi_key_here
 
-**Features:**
-- 🔹 Intelligent tiering
-- 🔹 Lifecycle transitions
-- 🔹 CORS configuration
-- 🔹 Event notifications
-- 🔹 Access logging
+# NLP Service
+NLP_SERVICE_ENDPOINT=localhost:50052
+```
 
-**Usage:**
-```hcl
-module "s3_data_lake" {
-  source = "../../modules/s3"
+#### 4️⃣ Start Services
 
-  environment    = "dev"
-  bucket_name    = "dev-market-impact-data-lake-${account_id}"
-  bucket_purpose = "data-lake"
-  
-  versioning_enabled      = false
-  lifecycle_rules_enabled = true
-  logging_enabled         = false
-  
-  eks_node_role_arn = module.eks.node_role_arn
+**Option A: Docker Compose (Recommended)**
+
+```bash
+docker-compose up -d
+```
+
+**Option B: Manual Setup**
+
+```bash
+# Start PostgreSQL
+docker run -d \
+  --name postgres \
+  -e POSTGRES_DB=news_ingestion \
+  -e POSTGRES_PASSWORD=postgres123 \
+  -p 5432:5432 \
+  postgres:14-alpine
+
+# Start Redis
+docker run -d \
+  --name redis \
+  -p 6379:6379 \
+  redis:7-alpine
+
+# Run the service
+go run main.go
+```
+
+#### 5️⃣ Verify Installation
+
+```bash
+# Check health
+curl http://localhost:4001/health
+
+# Expected response:
+{
+  "status": "healthy",
+  "service": "news-ingestion",
+  "version": "1.0.0",
+  "database": "connected"
 }
 ```
 
 ---
 
-## 🌍 Environments
+## 📚 API Documentation
 
-### Development Environment
+### HTTP REST API
 
-**Purpose:** Testing and development
-**Cost:** ~$150-200/month
-**Configuration:** `environments/dev.tfvars`
+Base URL: `http://localhost:4001/api/v1`
 
-| Resource | Configuration |
-|----------|---------------|
-| VPC CIDR | `10.2.0.0/16` |
-| EKS Nodes | 15-17 x t3.small (SPOT) |
-| RDS | Existing instance (manually created) |
-| Redis | 1 x cache.t3.micro |
-| NAT | Single NAT Gateway |
-| High Availability | No |
-
-### Staging Environment
-
-**Purpose:** Pre-production testing
-**Cost:** ~$300-400/month
-**Configuration:** `environments/staging.tfvars`
-
-| Resource | Configuration |
-|----------|---------------|
-| VPC CIDR | `10.1.0.0/16` |
-| EKS Nodes | 1-5 x t3.medium |
-| RDS | db.t3.small, Single-AZ |
-| Redis | 1 x cache.t3.small |
-| NAT | Single NAT Gateway |
-| High Availability | Partial |
-
-### Production Environment
-
-**Purpose:** Live production workloads
-**Cost:** ~$800-1200/month
-**Configuration:** `environments/production.tfvars`
-
-| Resource | Configuration |
-|----------|---------------|
-| VPC CIDR | `10.0.0.0/16` |
-| EKS Nodes | 3-10 x t3.large/xlarge |
-| RDS | db.r6g.xlarge, Multi-AZ |
-| Redis | 2 x cache.r6g.large, Multi-AZ |
-| NAT | Multi-AZ NAT Gateways |
-| High Availability | Full |
-
----
-
-## 🚢 Deployment Guide
-
-### Step-by-Step Deployment
-
-#### Phase 1: Backend Setup (One-time)
+#### Health & Metrics
 
 ```bash
-# 1. Create S3 bucket for state
-aws s3 mb s3://market-impact-terraform-state-dev --region us-east-1
+# Health check
+GET /health
 
-# 2. Enable versioning
-aws s3api put-bucket-versioning \
-  --bucket market-impact-terraform-state-dev \
-  --versioning-configuration Status=Enabled
+# Readiness probe
+GET /ready
 
-# 3. Create DynamoDB table for locking
-aws dynamodb create-table \
-  --table-name market-impact-terraform-locks-dev \
-  --attribute-definitions AttributeName=LockID,AttributeType=S \
-  --key-schema AttributeName=LockID,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST \
-  --region us-east-1
+# Liveness probe
+GET /live
+
+# Service metrics
+GET /metrics
 ```
 
-#### Phase 2: Development Environment
+#### Article Endpoints
 
 ```bash
-# Navigate to development environment
-cd environments/development
+# Create article
+POST /articles
+Content-Type: application/json
 
-# Initialize Terraform
-terraform init -backend-config=../../backend-configs/backenddev.tf
+{
+  "source_id": 1,
+  "title": "Stock Market Update",
+  "content": "Market analysis...",
+  "url": "https://example.com/article",
+  "symbols": ["AAPL", "GOOGL"],
+  "published_at": "2025-10-28T10:00:00Z"
+}
 
-# Validate configuration
-terraform validate
+# Get article by ID
+GET /articles/{id}
 
-# Plan deployment
-terraform plan -var-file=../dev.tfvars -out=tfplan
+# List articles
+GET /articles?limit=50&status=pending&symbols=AAPL,GOOGL
 
-# Review the plan carefully
-# Apply infrastructure
-terraform apply tfplan
+# Update article status
+PUT /articles/{id}/status
+{
+  "status": "completed"
+}
 ```
 
-#### Phase 3: Configure kubectl
+#### Source Endpoints
 
 ```bash
-# Update kubeconfig
-aws eks update-kubeconfig \
-  --region us-east-1 \
-  --name dev-market-impact-eks
+# Create source
+POST /sources
+{
+  "name": "Reuters Business",
+  "source_type": "RSS",
+  "base_url": "https://reuters.com/feed",
+  "rate_limit_per_minute": 60
+}
 
-# Verify cluster access
-kubectl get nodes
-kubectl get pods -A
+# Get source
+GET /sources/{id}
+
+# List sources
+GET /sources?active=true
+
+# Update source
+PUT /sources/{id}
 ```
 
-#### Phase 4: Verify Deployment
+#### Ingestion Triggers
 
 ```bash
-# Check EKS cluster
-kubectl cluster-info
+# Trigger manual ingestion
+POST /ingestion/trigger
+{
+  "source_type": "rss"
+}
 
-# Check nodes
-kubectl get nodes -o wide
+# Trigger RSS ingestion
+POST /ingestion/trigger/rss
 
-# Check system pods
-kubectl get pods -n kube-system
+# Trigger NewsAPI ingestion
+POST /ingestion/trigger/newsapi
 
-# Test Redis connectivity (from within a pod)
-# Test RDS connectivity (from within a pod)
+# Get ingestion status
+GET /ingestion/status
 ```
 
-### Deployment Timeline
+### gRPC API
 
-```mermaid
-gantt
-    title Infrastructure Deployment Timeline
-    dateFormat  YYYY-MM-DD
-    section Backend
-    S3 Bucket Creation           :a1, 2024-01-01, 5m
-    DynamoDB Table              :a2, after a1, 5m
-    section Networking
-    VPC & Subnets               :b1, after a2, 10m
-    NAT Gateway                 :b2, after b1, 5m
-    section EKS
-    Control Plane               :c1, after b2, 15m
-    Node Group                  :c2, after c1, 10m
-    section Data Layer
-    ElastiCache                 :d1, after c2, 10m
-    S3 Buckets                  :d2, after d1, 5m
-    section Verification
-    Testing & Validation        :e1, after d2, 15m
+Server: `localhost:4002`
+
+#### Service Definition
+
+```protobuf
+service NewsService {
+  // Article operations
+  rpc CreateArticle(CreateArticleRequest) returns (CreateArticleResponse);
+  rpc GetArticle(GetArticleRequest) returns (GetArticleResponse);
+  rpc ListArticles(ListArticlesRequest) returns (ListArticlesResponse);
+  
+  // Streaming operations
+  rpc StreamArticles(StreamArticlesRequest) returns (stream StreamArticlesResponse);
+  rpc StreamArticlesByDateRange(StreamArticlesByDateRangeRequest) 
+      returns (stream StreamArticlesByDateRangeResponse);
+  
+  // Processing acknowledgment
+  rpc AcknowledgeArticleProcessing(AcknowledgeArticleProcessingRequest) 
+      returns (AcknowledgeArticleProcessingResponse);
+}
+```
+
+#### Example Usage (grpcurl)
+
+```bash
+# List articles
+grpcurl -plaintext localhost:4002 news.v1.NewsService/ListArticles
+
+# Stream pending articles
+grpcurl -plaintext \
+  -d '{"status": "pending", "batch_size": 10}' \
+  localhost:4002 news.v1.NewsService/StreamArticles
+
+# Health check
+grpcurl -plaintext localhost:4002 news.v1.NewsService/HealthCheck
 ```
 
 ---
 
 ## ⚙️ Configuration
 
+### Configuration File (`config.yaml`)
+
+```yaml
+server:
+  port: 4001
+  grpc_port: 4002
+  environment: development
+
+database:
+  postgres:
+    host: localhost
+    port: 5432
+    database: news_ingestion
+    username: postgres
+    password: ${POSTGRES_PASSWORD}
+    ssl_mode: disable
+    max_open_conns: 25
+    max_idle_conns: 5
+
+redis:
+  host: localhost
+  port: 6379
+  database: 0
+
+logging:
+  level: info
+  format: text
+
+processing:
+  enable_auto_ingestion: true
+  sentiment_trigger_threshold: 10
+  rss_schedule: "0 */2 * * * *"      # Every 2 minutes
+  newsapi_schedule: "0 */7 * * * *"  # Every 7 minutes
+  cleanup_schedule: "0 0 0 * * *"    # Daily at midnight
+  batch_size: 100
+  worker_count: 5
+  retry_attempts: 3
+
+news_sources:
+  newsapi:
+    api_key: ${NEWSAPI_KEY}
+    base_url: https://newsapi.org/v2
+    enabled: true
+
+  rss_feeds:
+    - name: "Reuters Business"
+      url: "https://www.reutersagency.com/feed/?best-topics=business-finance"
+      enabled: true
+    
+    - name: "BBC News - Business"
+      url: "http://feeds.bbci.co.uk/news/business/rss.xml"
+      enabled: true
+
+external_services:
+  nlp_service:
+    grpc_endpoint: localhost:50052
+    timeout: 30s
+    max_retry: 3
+```
+
 ### Environment Variables
 
-Create a `.env` file (not committed to Git):
+The service supports environment variable substitution using `${VAR:default}` syntax:
 
 ```bash
-export AWS_REGION=us-east-1
-export AWS_PROFILE=market-impact
-export TF_VAR_environment=dev
-```
+# Database
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=news_ingestion
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=yahyasd56
 
-### Terraform Variables
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
 
-Key variables in `environments/dev.tfvars`:
+# Server
+SERVER_HTTP_PORT=4001
+SERVER_GRPC_PORT=4002
+SERVER_ENVIRONMENT=development
 
-```hcl
-# Environment Configuration
-environment = "dev"
-vpc_cidr    = "10.2.0.0/16"
-region      = "us-east-1"
+# Logging
+LOG_LEVEL=info
+LOG_FORMAT=text
 
-# EKS Configuration
-cluster_version     = "1.30"
-node_instance_types = ["t3.small"]
-node_min_size       = 15
-node_max_size       = 17
-node_desired_size   = 15
+# Processing
+ENABLE_AUTO_INGESTION=true
+SENTIMENT_TRIGGER_THRESHOLD=10
+BATCH_SIZE=100
 
-# Redis Configuration
-redis_node_type        = "cache.t3.micro"
-redis_num_cache_nodes  = 1
+# API Keys
+NEWSAPI_KEY=your_api_key_here
+TWITTER_BEARER_TOKEN=your_token_here
 
-# Existing RDS Configuration
-existing_rds_endpoint = "postgres.example.rds.amazonaws.com"
-existing_rds_port     = "5432"
-existing_rds_vpc_id   = "vpc-xxxxx"
-existing_rds_sg_id    = "sg-xxxxx"
+# External Services
+NLP_SERVICE_ENDPOINT=localhost:50052
 ```
 
 ---
 
-## 🔒 Security
+## 💻 Development
 
-### Security Best Practices
+### Project Structure
 
-✅ **Encryption at Rest**
-- All EBS volumes encrypted with KMS
-- RDS encryption enabled
-- Redis encryption at rest
-- S3 server-side encryption
+```
+news-ingestion/
+├── cmd/
+│   └── analysis/           # Analysis service (future)
+├── config/
+│   └── config.yaml         # Configuration file
+├── internal/
+│   ├── client/            # External API clients
+│   │   ├── interfaces.go
+│   │   ├── news_api_client.go
+│   │   ├── rss_client.go
+│   │   ├── twitter_client.go
+│   │   └── nlp_client.go
+│   ├── database/          # Database connection & migrations
+│   │   ├── connection.go
+│   │   └── seed.go
+│   ├── handler/           # HTTP & gRPC handlers
+│   │   ├── http_handler.go
+│   │   ├── grpc_handler.go
+│   │   └── grpc_streaming_handler.go
+│   ├── model/             # Data models
+│   │   ├── article.go
+│   │   └── source.go
+│   ├── repository/        # Database repositories
+│   │   ├── article_repository.go
+│   │   ├── cache_repository.go
+│   │   ├── processing_log_repository.go
+│   │   └── rate_limit_repository.go
+│   └── service/           # Business logic
+│       ├── ingestion_service.go
+│       ├── deduplication_service.go
+│       ├── extraction_service.go
+│       └── sentiment_trigger_service.go
+├── proto/                 # Protocol Buffer definitions
+│   ├── NewsService.proto
+│   └── nlp_processing.proto
+├── test/
+│   ├── integration/       # Integration tests
+│   └── unit/              # Unit tests
+├── Dockerfile
+├── docker-compose.yaml
+├── Jenkinsfile
+├── go.mod
+└── main.go
+```
 
-✅ **Encryption in Transit**
-- HTTPS/TLS for all communications
-- VPN/Private Link for sensitive data
-- Redis transit encryption (optional)
+### Building from Source
 
-✅ **Network Security**
-- Private subnets for workloads
-- Security groups with least privilege
-- Network ACLs
-- VPC Flow Logs (production)
+```bash
+# Build binary
+go build -o news-ingestion-service main.go
 
-✅ **Access Control**
-- IAM roles with minimal permissions
-- IRSA for pod-level permissions
-- Secrets Manager for credentials
-- MFA for production access
+# Build with optimizations
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+  -ldflags='-w -s -extldflags "-static"' \
+  -a -installsuffix cgo \
+  -o news-ingestion-service main.go
 
-✅ **Monitoring & Auditing**
-- CloudWatch Logs
-- CloudTrail for API auditing
-- CloudWatch Alarms
-- VPC Flow Logs
+# Build Docker image
+docker build -t news-ingestion:latest .
+```
 
-### Security Group Rules
+### Running Tests
 
-```mermaid
-graph LR
-    A[Internet] -->|443| B[ALB]
-    B -->|Any| C[EKS Nodes]
-    C -->|5432| D[RDS]
-    C -->|6379| E[Redis]
-    C -->|443| F[S3/ECR]
+```bash
+# Run all tests
+go test ./...
+
+# Run with coverage
+go test -cover ./...
+
+# Run specific package
+go test ./internal/service/...
+
+# Generate coverage report
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
+
+### Code Generation
+
+```bash
+# Generate Protocol Buffer code
+protoc --go_out=. --go_opt=paths=source_relative \
+       --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+       proto/NewsService.proto
+
+# Generate mocks (if using mockgen)
+go generate ./...
+```
+
+### Development Workflow
+
+```bash
+# 1. Start dependencies
+docker-compose up postgres redis
+
+# 2. Run service in development mode
+go run main.go
+
+# 3. Watch for changes (using air)
+air
+
+# 4. Run tests on change (using goconvey)
+goconvey
+```
+
+---
+
+## 🚢 Deployment
+
+### Docker Deployment
+
+#### Build & Run
+
+```bash
+# Build image
+docker build -t news-ingestion:1.0.0 .
+
+# Run container
+docker run -d \
+  --name news-ingestion \
+  -p 4001:4001 \
+  -p 4002:4002 \
+  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_PASSWORD=secret \
+  -e NEWSAPI_KEY=your_key \
+  news-ingestion:1.0.0
+```
+
+#### Docker Compose
+
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f news-ingestion
+
+# Stop services
+docker-compose down
+
+# Start with optional services (pgAdmin)
+docker-compose --profile tools up -d
+```
+
+### Kubernetes Deployment
+
+#### Prerequisites
+
+- Flux CD installed
+- Kubernetes cluster (AWS EKS, GKE, etc.)
+- kubectl configured
+
+#### Deployment Files
+
+```yaml
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-ingestion
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: news-ingestion
+  template:
+    metadata:
+      labels:
+        app: news-ingestion
+    spec:
+      containers:
+      - name: news-ingestion
+        image: yahyazakaria123/market-impact-analysis-system-news-ingestion-service:latest
+        ports:
+        - containerPort: 4001
+          name: http
+        - containerPort: 4002
+          name: grpc
+        env:
+        - name: POSTGRES_HOST
+          value: postgres-service
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 4001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 4001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+```
+
+#### Deploy to Kubernetes
+
+```bash
+# Apply configurations
+kubectl apply -f k8s/
+
+# Check deployment
+kubectl get pods -n production
+
+# View logs
+kubectl logs -f deployment/news-ingestion -n production
+
+# Scale replicas
+kubectl scale deployment/news-ingestion --replicas=5 -n production
+```
+
+### CI/CD Pipeline
+
+The service includes a Jenkins pipeline that automatically:
+
+1. ✅ Builds Docker image
+2. ✅ Pushes to Docker Hub
+3. ✅ Updates GitOps repository
+4. ✅ Creates pull request for review
+
+**Pipeline Configuration**: See `Jenkinsfile` for details
+
+---
+
+## 🧪 Testing
+
+### Unit Tests
+
+```bash
+# Run unit tests
+go test ./internal/service/...
+
+# Example test structure
+func TestIngestionService_IngestFromRSS(t *testing.T) {
+    // Setup
+    service := setupTestService()
     
-    style A fill:#ffebee
-    style D fill:#e8f5e9
-    style E fill:#e8f5e9
+    // Execute
+    err := service.IngestFromRSS(context.Background())
+    
+    // Assert
+    assert.NoError(t, err)
+    assert.Greater(t, service.articleRepo.Count(), 0)
+}
+```
+
+### Integration Tests
+
+```bash
+# Start test database
+docker-compose -f docker-compose.test.yml up -d
+
+# Run integration tests
+go test -tags=integration ./test/integration/...
+```
+
+### Load Testing
+
+```bash
+# Using k6
+k6 run test/load/ingestion_test.js
+
+# Using hey
+hey -n 1000 -c 10 http://localhost:4001/api/v1/articles
+```
+
+### API Testing
+
+```bash
+# HTTP endpoints
+curl -X POST http://localhost:4001/api/v1/ingestion/trigger/rss
+
+# gRPC endpoints
+grpcurl -plaintext localhost:4002 news.v1.NewsService/HealthCheck
 ```
 
 ---
 
-## 📊 Monitoring
+## 📊 Monitoring & Observability
 
-### CloudWatch Dashboards
-
-The infrastructure includes CloudWatch alarms for:
-
-**EKS Monitoring**
-- Node CPU utilization
-- Node memory utilization
-- Pod failures
-- Cluster errors
-
-**RDS Monitoring**
-- CPU utilization (> 80%)
-- Freeable memory (< 512 MB)
-- Free storage space (< 5 GB)
-- Connection count
-
-**Redis Monitoring**
-- CPU utilization (> 75%)
-- Memory utilization (> 80%)
-- Evictions (> 1000)
-- Connection count
-
-**S3 Monitoring**
-- Bucket size thresholds
-- Access patterns
-
-### Accessing Logs
+### Health Checks
 
 ```bash
-# EKS Control Plane Logs
-aws logs tail /aws/eks/dev-market-impact-eks/cluster --follow
+# Liveness probe (is service alive?)
+curl http://localhost:4001/live
 
-# VPC Flow Logs (if enabled)
-aws logs tail /aws/vpc/dev-flow-logs --follow
+# Readiness probe (is service ready to accept traffic?)
+curl http://localhost:4001/ready
 
-# Redis Logs
-aws logs tail /aws/elasticache/dev/redis/slow-log --follow
+# Detailed health check
+curl http://localhost:4001/health
 ```
 
----
-
-## 💰 Cost Optimization
-
-### Current Costs (Development)
-
-| Service | Configuration | Monthly Cost |
-|---------|--------------|--------------|
-| EKS Control Plane | 1 cluster | $72 |
-| EKS Nodes | 15 x t3.small SPOT | $45-90 |
-| RDS | Existing (external) | $0 |
-| ElastiCache | 1 x t3.micro | $12 |
-| NAT Gateway | Single | $32 |
-| S3 | < 100 GB | $2-5 |
-| Data Transfer | Moderate | $10-20 |
-| **Total** | | **~$173-231** |
-
-### Cost Optimization Tips
-
-💡 **Use SPOT Instances**
-- 70% cost savings for EKS nodes
-- Configured in development environment
-
-💡 **Single NAT Gateway**
-- Development uses single NAT
-- Production uses multi-AZ for HA
-
-💡 **S3 Intelligent Tiering**
-- Automatic cost optimization
-- Lifecycle policies to Glacier
-
-💡 **Right-Sizing**
-- Start small, scale based on metrics
-- Use t3.small for development
-
-💡 **Resource Tagging**
-- All resources tagged for cost allocation
-- Use AWS Cost Explorer
-
----
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-#### Issue 1: Terraform Init Fails
-
-**Error:**
-```
-Error: Failed to get existing workspaces: S3 bucket does not exist
-```
-
-**Solution:**
-```bash
-# Create the backend S3 bucket
-aws s3 mb s3://market-impact-terraform-state-dev --region us-east-1
-```
-
-#### Issue 2: EKS Nodes Not Joining Cluster
-
-**Error:**
-```
-Nodes are in NotReady state
-```
-
-**Solution:**
-```bash
-# Check node logs
-kubectl describe node <node-name>
-
-# Verify IAM roles
-aws iam get-role --role-name dev-market-impact-eks-node-group-role
-
-# Check security groups
-aws ec2 describe-security-groups --group-ids <sg-id>
-```
-
-#### Issue 3: Cannot Connect to RDS
-
-**Error:**
-```
-Connection timeout to RDS endpoint
-```
-
-**Solution:**
-```bash
-# RDS is in a different VPC - use public endpoint
-# Verify connection string in SSM Parameter Store
-aws ssm get-parameter --name /dev/rds/connection-info
-```
-
-#### Issue 4: Terraform State Lock
-
-**Error:**
-```
-Error: Error acquiring the state lock
-```
-
-**Solution:**
-```bash
-# List locks
-aws dynamodb scan --table-name market-impact-terraform-locks-dev
-
-# Force unlock (use carefully!)
-terraform force-unlock <lock-id>
-```
-
-### Debug Commands
+### Metrics
 
 ```bash
-# Terraform debugging
-export TF_LOG=DEBUG
-terraform apply -var-file=../dev.tfvars
+# Get service metrics
+curl http://localhost:4001/metrics
 
-# EKS debugging
-kubectl get events --all-namespaces
-kubectl logs -n kube-system <pod-name>
-
-# AWS resource inspection
-aws eks describe-cluster --name dev-market-impact-eks
-aws ec2 describe-instances --filters "Name=tag:Environment,Values=dev"
+# Response includes:
+{
+  "articles_ingested": 1250,
+  "articles_processed": 1180,
+  "errors": 5,
+  "last_ingestion": "2025-10-28T10:30:00Z",
+  "uptime": "48h15m30s"
+}
 ```
 
----
+### Logging
 
-## 📚 Best Practices
+```bash
+# View logs (Docker)
+docker-compose logs -f news-ingestion
 
-### Terraform Best Practices
+# View logs (Kubernetes)
+kubectl logs -f deployment/news-ingestion -n production
 
-✅ **State Management**
-- Always use remote state (S3)
-- Enable state locking (DynamoDB)
-- Never commit state files
+# Filter logs by level
+kubectl logs deployment/news-ingestion | grep ERROR
+```
 
-✅ **Code Organization**
-- Use modules for reusability
-- Separate environments
-- DRY principle
+### Troubleshooting
 
-✅ **Version Control**
-- Pin provider versions
-- Use semantic versioning
-- Document changes
+#### Common Issues
 
-✅ **Security**
-- Never commit secrets
-- Use Secrets Manager/SSM
-- Enable encryption
+**Issue**: Service can't connect to database
 
-### Infrastructure Best Practices
+```bash
+# Check database connection
+docker-compose exec postgres psql -U postgres -d news_ingestion -c "\dt"
 
-✅ **High Availability**
-- Multi-AZ for production
-- Auto-scaling enabled
-- Backup and recovery plans
+# Verify credentials
+echo $POSTGRES_PASSWORD
+```
 
-✅ **Monitoring**
-- CloudWatch alarms
-- Log aggregation
-- Performance metrics
+**Issue**: No articles being ingested
 
-✅ **Cost Management**
-- Resource tagging
-- Right-sizing
-- SPOT instances where appropriate
+```bash
+# Check cron jobs
+curl http://localhost:4001/ingestion/status
+
+# Manually trigger ingestion
+curl -X POST http://localhost:4001/api/v1/ingestion/trigger/rss
+
+# Check logs for errors
+docker-compose logs news-ingestion | grep ERROR
+```
+
+**Issue**: High memory usage
+
+```bash
+# Adjust batch size in config
+BATCH_SIZE=50
+
+# Reduce concurrent workers
+WORKER_COUNT=3
+```
 
 ---
 
@@ -1064,74 +1020,99 @@ aws ec2 describe-instances --filters "Name=tag:Environment,Values=dev"
 
 We welcome contributions! Please follow these guidelines:
 
-### Development Workflow
+### Development Process
 
-```mermaid
-graph LR
-    A[Fork Repo] --> B[Create Branch]
-    B --> C[Make Changes]
-    C --> D[Test Locally]
-    D --> E[Commit]
-    E --> F[Push Branch]
-    F --> G[Create PR]
-    G --> H[Code Review]
-    H --> I[Merge]
-```
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
 
-### Commit Guidelines
+### Code Standards
 
-Use conventional commits:
+- Follow Go best practices and idioms
+- Add unit tests for new features
+- Update documentation as needed
+- Run `go fmt` before committing
+- Ensure all tests pass
 
-```bash
-feat: add RDS module documentation
-fix: correct security group rules
-docs: update README with examples
-refactor: simplify EKS module
-test: add validation for VPC CIDR
-```
+### Pull Request Checklist
 
-### Pull Request Process
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## 📞 Support & Contact
-
-- **Documentation:** [Internal Wiki](https://wiki.company.com/market-impact)
-- **Issues:** [GitHub Issues](https://github.com/your-org/market-impact-terraform/issues)
-- **Slack:** #market-impact-infra
-- **Email:** platform-engineering@company.com
+- [ ] Tests added/updated
+- [ ] Documentation updated
+- [ ] Code formatted with `go fmt`
+- [ ] All tests passing
+- [ ] No breaking changes (or documented)
+- [ ] Commit messages follow conventional commits
 
 ---
 
 ## 📄 License
 
-This project is licensed under the Proprietary License - All Rights Reserved.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 👥 Authors
+
+- **Zakaria Rekik** - *Initial work* - [ZakariaRek](https://github.com/ZakariaRek)
 
 ---
 
 ## 🙏 Acknowledgments
 
-- AWS for excellent documentation
-- Terraform community for modules and best practices
-- HashiCorp for Terraform
-- Our amazing platform engineering team
+- NewsAPI for providing access to news sources
+- Go community for excellent libraries
+- Contributors and testers
+
+---
+
+## 📞 Support
+
+- 📧 Email: support@example.com
+- 🐛 Issues: [GitHub Issues](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/discussions)
+- 📖 Documentation: [Wiki](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/wiki)
+
+---
+
+## 🗺️ Roadmap
+
+### Phase 1 - Core Features ✅
+- [x] RSS feed ingestion
+- [x] NewsAPI integration
+- [x] Basic deduplication
+- [x] PostgreSQL storage
+- [x] HTTP & gRPC APIs
+
+### Phase 2 - Enhancement 🚧
+- [x] Sentiment trigger service
+- [x] Batch processing
+- [x] Rate limiting
+- [ ] Advanced deduplication
+- [ ] Web scraping
+
+### Phase 3 - Scale 📅
+- [ ] Horizontal scaling
+- [ ] Caching optimization
+- [ ] ML-based relevance scoring
+- [ ] Real-time streaming
+- [ ] GraphQL API
+
+### Phase 4 - Intelligence 🔮
+- [ ] Trend detection
+- [ ] Anomaly detection
+- [ ] Predictive ingestion
+- [ ] Auto-source discovery
 
 ---
 
 <div align="center">
 
-**Built with ❤️ by the Platform Engineering Team**
+**Made with ❤️ by the Market Impact Analysis Team**
 
-![Terraform](https://img.shields.io/badge/-Terraform-623CE4?style=flat&logo=terraform&logoColor=white)
-![AWS](https://img.shields.io/badge/-AWS-FF9900?style=flat&logo=amazon-aws&logoColor=white)
-![Kubernetes](https://img.shields.io/badge/-Kubernetes-326CE5?style=flat&logo=kubernetes&logoColor=white)
+⭐ Star us on GitHub — it helps!
 
-[⬆ Back to Top](#-market-impact-analysis-system---terraform-infrastructure)
+[Report Bug](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/issues) · [Request Feature](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/issues) · [Documentation](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/wiki)
 
 </div>
