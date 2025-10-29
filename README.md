@@ -853,11 +853,6 @@ Results vary by market conditions and stock volatility.
 
 ---
 
-## 🌟 Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system&type=Date)](https://star-history.com/#ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system&Date)
-
----
 
 
 
@@ -881,6 +876,7 @@ Results vary by market conditions and stock volatility.
 [⬆ Back to Top](#-real-time-financial-news-market-impact-analysis-system)
 
 </div>
+
 
 
 
