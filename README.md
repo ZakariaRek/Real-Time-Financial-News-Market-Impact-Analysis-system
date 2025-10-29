@@ -889,53 +889,6 @@ Thanks to all contributors who have helped build this project!
 
 ---
 
-## 🗺️ Roadmap
-
-### 🚀 Current (v1.0)
-- ✅ Multi-source news ingestion
-- ✅ Sentiment analysis
-- ✅ Market predictions
-- ✅ Trading signals
-- ✅ WebSocket notifications
-
-### 📅 Q1 2026 (v1.1)
-- [ ] Enhanced ML models (BERT, FinBERT)
-- [ ] Real-time stock price integration
-- [ ] Advanced technical analysis
-- [ ] Mobile applications (iOS/Android)
-- [ ] Email/SMS notifications
-
-### 📅 Q2 2026 (v1.2)
-- [ ] Options trading signals
-- [ ] Portfolio optimization
-- [ ] Backtesting framework
-- [ ] Social sentiment integration
-- [ ] Multi-language support
-
-### 📅 Q3 2026 (v2.0)
-- [ ] AI-powered prediction models
-- [ ] Cryptocurrency support
-- [ ] Automated trading execution
-- [ ] Advanced risk management
-- [ ] Enterprise features
-
----
-
-## 🎯 Acknowledgments
-
-This project uses and is inspired by:
-
-- **News Sources**: Reuters, Bloomberg, BBC, NewsAPI
-- **Technologies**: Go, Java, Spring Boot, gRPC, PostgreSQL, Redis
-- **Community**: Open-source contributors and financial tech community
-
-Special thanks to:
-- The Go and Java communities
-- Spring Boot framework team
-- gRPC and Protocol Buffers teams
-- PostgreSQL and Redis communities
-
----
 
 <div align="center">
 
@@ -954,5 +907,6 @@ Special thanks to:
 [⬆ Back to Top](#-real-time-financial-news-market-impact-analysis-system)
 
 </div>
+
 
 
