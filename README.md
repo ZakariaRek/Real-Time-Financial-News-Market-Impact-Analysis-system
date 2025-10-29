@@ -159,21 +159,21 @@ graph TB
 
     subgraph "Microservices Platform"
         subgraph "Ingestion Layer"
-            NI[📥 News Ingestion Service<br/>Go | Ports: 4001, 4002<br/>Multi-source data collection]
+            NI[📥 News Ingestion Service\nGo — Ports 4001, 4002\nMulti-source data collection]
         end
 
         subgraph "Processing Layer"
-            NLP[🧠 NLP Processing Service<br/>Go | Ports: 50052, 8080<br/>Sentiment analysis engine]
-            MI[📈 Market Impact Service<br/>Java | Ports: 8082, 9090<br/>Prediction generation]
+            NLP[🧠 NLP Processing Service\nGo — Ports 50052, 8080\nSentiment analysis engine]
+            MI[📈 Market Impact Service\nJava — Ports 8082, 9090\nPrediction generation]
         end
 
         subgraph "Signal Layer"
-            AS[🚨 Alert Signal Service<br/>Java | Ports: 8081, 9095<br/>Trading signal alerts]
+            AS[🚨 Alert Signal Service\nJava — Ports 8081, 9095\nTrading signal alerts]
         end
 
         subgraph "Data Layer"
-            PG[(🐘 PostgreSQL<br/>4 Databases<br/>Time-series optimized)]
-            REDIS[(⚡ Redis<br/>Caching<br/>Session storage)]
+            PG[(🐘 PostgreSQL\n4 Databases\nTime-series optimized)]
+            REDIS[(⚡ Redis\nCaching\nSession storage)]
         end
     end
 
@@ -187,9 +187,9 @@ graph TB
     NEWS --> NI
     TWITTER --> NI
 
-    NI -->|gRPC Stream| NLP
-    NLP -->|gRPC| MI
-    MI -->|gRPC| AS
+    NI --> NLP
+    NLP --> MI
+    MI --> AS
 
     NI --> PG
     NLP --> PG
@@ -200,9 +200,9 @@ graph TB
     MI --> REDIS
     AS --> REDIS
 
-    AS -->|WebSocket| WEB
-    AS -->|WebSocket| MOBILE
-    AS -->|WebSocket| TRADING
+    AS --> WEB
+    AS --> MOBILE
+    AS --> TRADING
 
     style NI fill:#00ADD8,stroke:#00758F,color:#fff
     style NLP fill:#00ADD8,stroke:#00758F,color:#fff
@@ -210,6 +210,7 @@ graph TB
     style AS fill:#ED8B00,stroke:#B86A00,color:#fff
     style PG fill:#336791,stroke:#1a3a52,color:#fff
     style REDIS fill:#DC382D,stroke:#8b1e19,color:#fff
+
 ```
 
 ### Data Flow Pipeline
@@ -880,6 +881,7 @@ Results vary by market conditions and stock volatility.
 [⬆ Back to Top](#-real-time-financial-news-market-impact-analysis-system)
 
 </div>
+
 
 
 
