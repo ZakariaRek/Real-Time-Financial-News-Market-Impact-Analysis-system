@@ -727,36 +727,6 @@ http://localhost:3000
 | **Cache Hit Rate** | 60% | > 50% |
 
 ---
-
-## 🧪 Testing
-
-### Running Tests
-
-```bash
-# Go Services (News Ingestion, NLP Processing)
-cd services/news-ingestion
-go test ./... -v -cover
-
-# Java Services (Market Impact, Alert Signal)
-cd services/MarketImpact
-./mvnw test
-
-# Integration Tests
-./scripts/run-integration-tests.sh
-
-# Load Testing
-k6 run test/load/system-load-test.js
-```
-
-### Test Coverage
-
-| Service | Unit Tests | Integration Tests | Coverage |
-|---------|-----------|-------------------|----------|
-| News Ingestion | ✅ 95% | ✅ 85% | 92% |
-| NLP Processing | ✅ 90% | ✅ 80% | 87% |
-| Market Impact | ✅ 88% | ✅ 75% | 84% |
-| Alert Signal | ✅ 92% | ✅ 82% | 89% |
-
 ---
 
 ## 🤝 Contributing
@@ -840,14 +810,7 @@ copies or substantial portions of the Software.
 
 ---
 
-## 🆘 Support
 
-### 📞 Get Help
-
-- **📧 Email**: support@financialintelligence.com
-- **🐛 Bug Reports**: [GitHub Issues](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/issues)
-- **💬 Discussions**: [GitHub Discussions](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/discussions)
-- **📖 Documentation**: [Wiki](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/wiki)
 
 ### 🤔 FAQ
 
@@ -991,4 +954,5 @@ Special thanks to:
 [⬆ Back to Top](#-real-time-financial-news-market-impact-analysis-system)
 
 </div>
+
 
