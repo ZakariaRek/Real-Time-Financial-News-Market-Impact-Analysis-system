@@ -14,13 +14,6 @@ Transform financial news into actionable trading signals using advanced sentimen
 
 ---
 
-### 🌟 Key Metrics
-
-![Throughput](https://img.shields.io/badge/Throughput-12,500%20articles/hour-orange?style=flat-square)
-![Latency](https://img.shields.io/badge/Latency-<2s%20end--to--end-blue?style=flat-square)
-![Accuracy](https://img.shields.io/badge/Prediction%20Accuracy-78.5%25-green?style=flat-square)
-![Availability](https://img.shields.io/badge/Availability-99.95%25-brightgreen?style=flat-square)
-
 </div>
 
 ---
@@ -905,6 +898,7 @@ Thanks to all contributors who have helped build this project!
 [⬆ Back to Top](#-real-time-financial-news-market-impact-analysis-system)
 
 </div>
+
 
 
 
