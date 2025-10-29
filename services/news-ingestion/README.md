@@ -1053,9 +1053,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 👥 Authors
-
-- **Zakaria Rekik** - *Initial work* - [ZakariaRek](https://github.com/ZakariaRek)
 
 ---
 
