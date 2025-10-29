@@ -34,7 +34,6 @@
 - [Monitoring & Health Checks](#-monitoring--health-checks)
 - [CI/CD Pipeline](#-cicd-pipeline)
 - [Development](#-development)
-- [Testing](#-testing)
 - [Troubleshooting](#-troubleshooting)
 - [Contributing](#-contributing)
 - [License](#-license)
@@ -286,7 +285,6 @@ graph LR
 ### DevOps
 - ![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker) - Containerization
 - ![Jenkins](https://img.shields.io/badge/Jenkins-CI/CD-red?logo=jenkins) - Continuous integration
-- ![GitLab CI](https://img.shields.io/badge/GitLab%20CI-Pipeline-orange?logo=gitlab) - Automated testing
 
 ---
 
@@ -991,30 +989,7 @@ scrape_configs:
 
 ## 🔄 CI/CD Pipeline
 
-### GitLab CI Pipeline
 
-The service uses GitLab CI for automated testing and deployment.
-
-```mermaid
-graph LR
-    A[Git Push] --> B[Test Stage]
-    B --> C[Build Stage]
-    C --> D[Docker Build]
-    D --> E[Docker Push]
-    E --> F[GitOps Update]
-    
-    B -->|Tests Pass| C
-    C -->|Build Success| D
-    D -->|Image Built| E
-    E -->|Pushed to Hub| F
-    
-    style A fill:#e1f5ff
-    style B fill:#fff9c4
-    style C fill:#c8e6c9
-    style D fill:#b39ddb
-    style E fill:#ffab91
-    style F fill:#a5d6a7
-```
 
 **Pipeline Stages:**
 
@@ -1320,11 +1295,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📞 Support
-
-- **Documentation**: [Wiki](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/wiki)
-- **Issues**: [GitHub Issues](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/issues)
-- **Email**: support@alertsignal.com
 
 ---
 
