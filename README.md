@@ -84,7 +84,7 @@ graph LR
 
 #### 📰 Multi-Source Ingestion
 - **RSS Feeds** from Reuters, Bloomberg, BBC
-- **NewsAPI** integration (80,000+ sources)
+- **NewsAPI** integration 
 - **Twitter** financial stream monitoring
 - **Intelligent deduplication** (content-based)
 - **Automatic symbol extraction** ($AAPL, GOOGL)
@@ -991,3 +991,4 @@ Special thanks to:
 [⬆ Back to Top](#-real-time-financial-news-market-impact-analysis-system)
 
 </div>
+
