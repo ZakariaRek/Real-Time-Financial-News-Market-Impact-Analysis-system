@@ -873,12 +873,6 @@ This project is part of the Real-Time Financial News Market Impact Analysis Syst
 
 ---
 
-## 📞 Support
-
-For questions and support:
-- 📧 Email: support@example.com
-- 🐛 Issues: [GitHub Issues](https://github.com/your-org/your-repo/issues)
-- 📖 Documentation: [Full Docs](https://docs.example.com)
 
 ---
 
