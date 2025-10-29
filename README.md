@@ -858,25 +858,7 @@ Results vary by market conditions and stock volatility.
 
 ---
 
-## 👥 Contributors
 
-Thanks to all contributors who have helped build this project!
-
-<!-- ALL-CONTRIBUTORS-LIST:START -->
-<table>
-  <tr>
-    <td align="center">
-      <a href="https://github.com/ZakariaRek">
-        <img src="https://github.com/ZakariaRek.png" width="100px;" alt="Zakaria Rekik"/>
-        <br />
-        <sub><b>Zakaria Rekik</b></sub>
-      </a>
-      <br />
-      💻 🎨 📖
-    </td>
-  </tr>
-</table>
-<!-- ALL-CONTRIBUTORS-LIST:END -->
 
 ---
 
@@ -898,6 +880,7 @@ Thanks to all contributors who have helped build this project!
 [⬆ Back to Top](#-real-time-financial-news-market-impact-analysis-system)
 
 </div>
+
 
 
 
