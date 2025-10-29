@@ -1064,43 +1064,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📞 Support
 
-- 📧 Email: support@example.com
-- 🐛 Issues: [GitHub Issues](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/discussions)
-- 📖 Documentation: [Wiki](https://github.com/ZakariaRek/Real-Time-Financial-News-Market-Impact-Analysis-system/wiki)
-
----
-
-## 🗺️ Roadmap
-
-### Phase 1 - Core Features ✅
-- [x] RSS feed ingestion
-- [x] NewsAPI integration
-- [x] Basic deduplication
-- [x] PostgreSQL storage
-- [x] HTTP & gRPC APIs
-
-### Phase 2 - Enhancement 🚧
-- [x] Sentiment trigger service
-- [x] Batch processing
-- [x] Rate limiting
-- [ ] Advanced deduplication
-- [ ] Web scraping
-
-### Phase 3 - Scale 📅
-- [ ] Horizontal scaling
-- [ ] Caching optimization
-- [ ] ML-based relevance scoring
-- [ ] Real-time streaming
-- [ ] GraphQL API
-
-### Phase 4 - Intelligence 🔮
-- [ ] Trend detection
-- [ ] Anomaly detection
-- [ ] Predictive ingestion
-- [ ] Auto-source discovery
 
 ---
 
